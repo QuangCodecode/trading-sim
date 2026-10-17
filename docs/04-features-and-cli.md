@@ -191,7 +191,13 @@ Must finish in < 3 s. Shows diversification is about **odds**, not one lucky pat
 - Explainer template: *"{affected} moved {x}%. They make up about {share}% of MIX6 today,
   so they moved the ETF {c} points. Everything else moved it {o} points. Net: MIX6 {m}%."*
   where `share = Σ w_i·P[i][t−1]/P[i][0] / Σ_all (same) × 100` (current effective weight).
-- If the player **holds** an affected stock, add: "Your NVDA position changed by $X today."
+- If the player **holds** an affected stock, add: "Your NVDA position changed by $X that day."
+  Shown in the NEWS lines after `next` only (holdings can't change during `next`, so the
+  quantity is right; for an old day in `news DAY` it might not be).
+- Market-wide events say "Market-wide news can't be diversified away" instead of the
+  share sentence (every holding was hit). `news 0` / a future day → friendly error.
+- `data/events.json` ships 16 templates (5 stock, 8 sector, 3 market; 8 good, 8 bad), including the
+  three tricky headlines plus "Exxon hit with record fine over oil spill".
 
 ### E-03 Trade Coach (Phase 3)
 

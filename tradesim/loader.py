@@ -5,6 +5,7 @@ from pathlib import Path
 
 from tradesim.engine.errors import DataFileError
 from tradesim.engine.etf import ETF
+from tradesim.engine.events import SCOPES
 from tradesim.engine.stock import Stock
 
 WEIGHT_TOLERANCE = 1e-9
@@ -67,3 +68,46 @@ def _check_etf(etf: ETF, stocks: dict[str, Stock], seen: dict[str, ETF]) -> None
     total = sum(etf.weights.values())
     if abs(total - 1.0) > WEIGHT_TOLERANCE:
         raise DataFileError(f"{etf.symbol} weights sum to {total}, not 1")
+
+
+class EventCatalogue:
+    """Everything in data/events.json: headline templates and the keyword counter's word lists."""
+
+    def __init__(self, templates: list[dict], positive_words: list[str],
+                 negative_words: list[str]) -> None:
+        """Store the validated templates and lower-cased word lists."""
+        self.templates = templates
+        self.positive_words = [word.lower() for word in positive_words]
+        self.negative_words = [word.lower() for word in negative_words]
+
+    def __repr__(self) -> str:
+        return f"EventCatalogue({len(self.templates)} templates)"
+
+
+def load_events(path: Path, stocks: dict[str, Stock]) -> EventCatalogue:
+    """Load event templates, checking each target exists and its shock has one sign (§3.7)."""
+    data = read_json(path)
+    try:
+        for template in data["templates"]:
+            _check_template(template, stocks)
+        return EventCatalogue(data["templates"], data["positive_words"], data["negative_words"])
+    except (KeyError, TypeError) as error:
+        raise DataFileError(f"{path} has a missing or bad field: {error}")
+
+
+def _check_template(template: dict, stocks: dict[str, Stock]) -> None:
+    """Raise DataFileError if one event template breaks a rule."""
+    name, scope, target = template["id"], template["scope"], template["target"]
+    sectors = {stock.sector for stock in stocks.values()}
+    if scope not in SCOPES:
+        raise DataFileError(f"Event {name}: unknown scope {scope}")
+    if (scope == "stock" and target not in stocks) or (scope == "sector" and target not in sectors):
+        raise DataFileError(f"Event {name}: unknown {scope} {target}")
+    low, high = template["shock_min"], template["shock_max"]
+    if low > high:
+        raise DataFileError(f"Event {name}: shock_min is above shock_max")
+    # The Headline Lab's "truth" is the shock's sign, so a range must not cross zero.
+    if low < 0 < high or low == high == 0:
+        raise DataFileError(f"Event {name}: shock range must be all positive or all negative")
+    if not template["headline"]:
+        raise DataFileError(f"Event {name}: empty headline")

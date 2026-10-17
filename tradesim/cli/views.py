@@ -7,8 +7,10 @@ from rich.text import Text
 
 from tradesim import config
 from tradesim.cli import charts
+from tradesim.education import explainer
 from tradesim.education.diversification_lab import LabResult, MonteCarloResult
 from tradesim.engine import analytics
+from tradesim.engine.events import MarketEvent
 from tradesim.engine.game import Game
 from tradesim.engine.trade import Trade
 
@@ -220,6 +222,62 @@ def best_and_worst(game: Game) -> Text:
     worst = min(returns, key=returns.get)
     return Text.assemble(f"Best holding    {best} ", signed(returns[best], "%", 1),
                          f"   Worst {worst} ", signed(returns[worst], "%", 1), "\n")
+
+
+def move_list(game: Game, event: MarketEvent) -> Text:
+    """'NVDA -8.1%, AAPL -7.9% · MIX6 -2.6%' for the stocks an event hit and the ETF."""
+    market, day = game.market, event.day
+    parts = [Text.assemble(f"{s} ", signed(market.daily_change_pct(s, day), "%", 1))
+             for s in explainer.affected_symbols(market, event)]
+    parts.append(Text.assemble(f"{config.LAB_DEFAULT_ETF} ",
+                               signed(market.daily_change_pct(config.LAB_DEFAULT_ETF, day), "%", 1)))
+    return Text(", ").join(parts[:-1]) + Text(" · ") + parts[-1]
+
+
+def news_lines(game: Game, events: list[MarketEvent]) -> list:
+    """Short NEWS lines shown after `next`, plus how each one hit the player's holdings."""
+    lines = []
+    for event in events:
+        lines.append(Text.assemble((f"NEWS day {event.day}: {event.headline}", "bold yellow"),
+                                   "  ", move_list(game, event)))
+        for symbol, change in explainer.position_impacts(game.market, game.portfolio, event).items():
+            lines.append(Text.assemble(f"   Your {symbol} position changed by ", signed(change),
+                                       " that day."))
+    if events:
+        lines.append(Text("Type news DAY for the full breakdown.", style="dim"))
+    return lines
+
+
+def news_view(game: Game, day: int) -> Group:
+    """Every event on `day`, its explanation and how MIX6 moved, holding by holding (E-02)."""
+    etf = config.LAB_DEFAULT_ETF
+    events = game.market.events_on(day)
+    parts = []
+    for event in events:
+        body = Text.assemble((event.explanation, "italic"), "\n", move_list(game, event), "\n\n",
+                             (explainer.explain_event(game.market, event, etf), "yellow"))
+        parts.append(Panel(body, title=f"Day {day}: {event.headline}", expand=False))
+    if not events:
+        parts.append(f"No news on day {day}. {etf} moved "
+                     f"{game.market.daily_change_pct(etf, day):+.2f}% on ordinary day-to-day noise.")
+    parts.append(breakdown_table(game, day))
+    return Group(*parts)
+
+
+def breakdown_table(game: Game, day: int) -> Table:
+    """Each holding's move, share of the fund and contribution in points (§3.4)."""
+    etf = config.LAB_DEFAULT_ETF
+    rows = explainer.etf_move_breakdown(game.market, etf, day)
+    table = Table(title=f"How {etf} moved on day {day}", title_justify="left")
+    for heading in ("Holding", "Move", "Share of fund", "Points"):
+        table.add_column(heading, justify="left" if heading == "Holding" else "right")
+    for row in rows:
+        table.add_row(f"[cyan]{row.symbol}[/cyan]", signed(row.move_pct, "%"),
+                      f"{row.share:.1%}", signed(row.points))
+    total = sum(row.points for row in rows)
+    table.add_row(f"[bold]{etf}[/bold]", signed(game.market.daily_change_pct(etf, day), "%"),
+                  "100%", signed(total), end_section=True)
+    return table
 
 
 def help_view(commands: dict[str, tuple[str, str]], topic: str | None) -> Table | str:

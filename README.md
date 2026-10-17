@@ -68,4 +68,4 @@ Type `help` in the game for all commands. Run tests with `pytest`.
 
 ## Status
 
-See the checklist in `docs/06-roadmap-and-demo.md`. Current phase: **Phase 2 — Market Events** (Phase 1 done).
+See the checklist in `docs/06-roadmap-and-demo.md`. Current phase: **Phase 5b — Headline Lab (AI)** (Phases 1–2 done).

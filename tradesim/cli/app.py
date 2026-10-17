@@ -11,7 +11,7 @@ from tradesim.engine.errors import CommandError, TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.market import Market
 from tradesim.engine.portfolio import Portfolio
-from tradesim.loader import load_universe
+from tradesim.loader import load_events, load_universe
 
 MAX_SEED = 1_000_000
 
@@ -22,7 +22,8 @@ def new_game(seed: int | None, days: int) -> Game:
         # A seed is chosen once and shown, so any game can be replayed with --seed.
         seed = random.SystemRandom().randrange(MAX_SEED)
     stocks, etfs = load_universe(config.UNIVERSE_PATH)
-    market = Market(stocks, etfs, seed, days)
+    templates = load_events(config.EVENTS_PATH, stocks).templates
+    market = Market(stocks, etfs, seed, days, templates)
     return Game(market, Portfolio(config.STARTING_CASH, config.FEE_PER_TRADE))
 
 
@@ -82,9 +83,9 @@ def do_history(game: Game, args: list) -> object:
 def do_next(game: Game, args: list) -> object:
     asked = args[0] if args else 1
     start = game.day
-    game.advance(asked)
+    events = game.advance(asked)
     moved = game.day - start
-    output = [views.market_table(game)]
+    output = [views.market_table(game)] + views.news_lines(game, events)
     if moved < asked:
         output.append(f"[yellow]Only {moved} day(s) were left — the game has ended.[/yellow]")
     if game.is_over():
@@ -105,6 +106,15 @@ def do_lab(game: Game, args: list) -> object:
     return views.lab_view(result)
 
 
+def do_news(game: Game, args: list) -> object:
+    day = args[0] if args else game.day
+    if day == 0:
+        raise TradeSimError("Day 0 is the opening day — there's no news yet. Try: next")
+    if day > game.day:
+        raise TradeSimError(f"Day {day} hasn't happened yet (today is day {game.day}).")
+    return views.news_view(game, day)
+
+
 def do_report(game: Game, args: list) -> object:
     return views.report_panel(game)
 
@@ -116,7 +126,7 @@ def do_help(game: Game, args: list) -> object:
 HANDLERS = {
     "market": do_market, "quote": do_quote, "chart": do_chart, "etf": do_etf,
     "buy": do_buy, "sell": do_sell, "portfolio": do_portfolio, "history": do_history,
-    "next": do_next, "lab": do_lab, "report": do_report, "help": do_help,
+    "next": do_next, "news": do_news, "lab": do_lab, "report": do_report, "help": do_help,
 }
 
 

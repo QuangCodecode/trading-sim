@@ -5,6 +5,7 @@ import random
 from tradesim import config
 from tradesim.engine.errors import UnknownSymbolError, TradeSimError
 from tradesim.engine.etf import ETF
+from tradesim.engine.events import MarketEvent, generate_events
 from tradesim.engine.stock import Stock
 
 
@@ -12,9 +13,11 @@ class Market:
     """Every price for days 0..num_days, pre-generated so the same seed gives the same market."""
 
     def __init__(self, stocks: dict[str, Stock], etfs: dict[str, ETF], seed: int,
-                 num_days: int, stock_prices: dict[str, list[float]] | None = None) -> None:
-        """Generate (or accept) stock prices for every day, then derive ETF prices.
+                 num_days: int, event_templates: list[dict] | None = None,
+                 stock_prices: dict[str, list[float]] | None = None) -> None:
+        """Generate news events and stock prices for every day, then derive ETF prices.
 
+        `event_templates` comes from data/events.json (None = no news).
         `stock_prices` is only passed by `from_prices` so tests can inject exact paths.
         """
         self.stocks = stocks
@@ -22,7 +25,7 @@ class Market:
         self.seed = seed
         self.num_days = num_days
         self._rng = random.Random(seed)
-        self._events: dict[int, list] = {}
+        self._events = generate_events(event_templates or [], seed, num_days)
         if stock_prices is None:
             stock_prices = self._generate_stock_prices()
         self._history = dict(stock_prices)
@@ -36,18 +39,23 @@ class Market:
         num_days = len(next(iter(prices.values()))) - 1
         return Market(stocks, etfs, seed=0, num_days=num_days, stock_prices=prices)
 
+    def add_event(self, event: MarketEvent) -> None:
+        """Attach a news event to its day without changing prices (used by tests)."""
+        self._events.setdefault(event.day, []).append(event)
+
     def _generate_stock_prices(self) -> dict[str, list[float]]:
         """Run the factor model of finance model §3.2 for every day."""
         prices = {symbol: [stock.start_price] for symbol, stock in self.stocks.items()}
         sectors = sorted({stock.sector for stock in self.stocks.values()})
-        for _day in range(1, self.num_days + 1):
+        for day in range(1, self.num_days + 1):
             # Fixed draw order (market, sorted sectors, sorted stocks) keeps runs reproducible.
             market_move = self._rng.gauss(0, config.MARKET_VOL)
             sector_moves = {name: self._rng.gauss(0, config.SECTOR_VOL) for name in sectors}
             for symbol in sorted(self.stocks):
                 stock = self.stocks[symbol]
                 noise = stock.volatility * self._rng.gauss(0, 1)
-                daily_return = stock.drift + market_move + sector_moves[stock.sector] + noise
+                shock = sum(e.shock for e in self.events_on(day) if e.affects(stock))
+                daily_return = stock.drift + market_move + sector_moves[stock.sector] + noise + shock
                 prices[symbol].append(next_price(prices[symbol][-1], daily_return))
         return prices
 
@@ -93,7 +101,7 @@ class Market:
         self._check_day(end)
         return self._history[symbol][start:end + 1]
 
-    def events_on(self, day: int) -> list:
+    def events_on(self, day: int) -> list[MarketEvent]:
         """News events that happened on `day` (empty list if none)."""
         return self._events.get(day, [])
 

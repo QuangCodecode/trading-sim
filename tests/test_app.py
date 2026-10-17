@@ -8,7 +8,7 @@ BAD_OR_ODD_LINES = [
     "", "   ", "buy", "buy XYZ 1", "buy JUMP 999999", "buy JUMP ten", "buy JUMP 1.5",
     "sell JUMP all", "sell JUMP 3", "next 0", "next -2", "next abc", "lab", "lab FUND",
     "lab JUMP CALM", "lab NOPE", "chart", "chart NOPE", "quote", "etf JUMP", "etf NOPE",
-    "help nope", "hl", "x" * 500, "ünïcødé 🚀", "quit", "news", "next 999", "buy JUMP 1",
+    "help nope", "hl", "x" * 500, "ünïcødé 🚀", "quit", "news", "news 0", "news 99", "news 3", "next 999", "buy JUMP 1",
 ]
 
 

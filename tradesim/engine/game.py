@@ -1,6 +1,7 @@
 """The Game class: ties the market, the portfolio and the clock together (C-03)."""
 
 from tradesim.engine.errors import GameOverError, InvalidQuantityError
+from tradesim.engine.events import MarketEvent
 from tradesim.engine.market import Market
 from tradesim.engine.portfolio import Portfolio
 from tradesim.engine.trade import Trade
@@ -24,7 +25,7 @@ class Game:
         """Trading days remaining after today."""
         return self.market.num_days - self.day
 
-    def advance(self, days: int = 1) -> list:
+    def advance(self, days: int = 1) -> list[MarketEvent]:
         """Move forward `days` (capped at the end) and return the news events passed."""
         if self.is_over():
             raise GameOverError("The game has ended. Type report or quit")

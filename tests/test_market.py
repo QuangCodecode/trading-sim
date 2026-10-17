@@ -8,6 +8,7 @@ from tradesim import config
 from tradesim.engine import analytics
 from tradesim.engine.errors import TradeSimError, UnknownSymbolError
 from tradesim.engine.market import Market
+from tradesim.loader import load_events
 
 
 def make(universe, seed, days=60):
@@ -76,3 +77,34 @@ def test_from_prices_computes_etf_by_formula(tiny_market):
 def test_daily_change_pct(tiny_market):
     assert tiny_market.daily_change_pct("JUMP", 1) == pytest.approx(10.0)
     assert tiny_market.daily_change_pct("JUMP", 0) == 0.0
+
+
+def test_events_use_separate_rng_so_prices_match_until_first_event(universe):
+    stocks, etfs = universe
+    templates = load_events(config.EVENTS_PATH, stocks).templates
+    plain = Market(stocks, etfs, 42, 60)
+    with_news = Market(stocks, etfs, 42, 60, templates)
+    first = min(day for day in range(1, 61) if with_news.events_on(day))
+    for symbol in plain.symbols():
+        assert plain.history(symbol, 0, first - 1) == with_news.history(symbol, 0, first - 1)
+    assert plain.prices_on(first) != with_news.prices_on(first)
+
+
+def test_events_are_deterministic_and_roughly_15_percent_of_days(universe):
+    stocks, etfs = universe
+    templates = load_events(config.EVENTS_PATH, stocks).templates
+    a = Market(stocks, etfs, 7, 1000, templates)
+    b = Market(stocks, etfs, 7, 1000, templates)
+    days_a = [d for d in range(1, 1001) if a.events_on(d)]
+    assert days_a == [d for d in range(1, 1001) if b.events_on(d)]
+    assert 100 < len(days_a) < 200
+
+
+def test_shock_moves_the_affected_stock(universe):
+    stocks, etfs = universe
+    boom = [{"id": "x", "scope": "stock", "target": "KO", "shock_min": 0.25, "shock_max": 0.25,
+             "headline": "h", "explanation": "e"}]
+    # Every rolled event is this +25% KO shock, so KO's biggest day must come from one.
+    market = Market(stocks, etfs, 3, 200, boom)
+    event_day = next(d for d in range(1, 201) if market.events_on(d))
+    assert market.daily_change_pct("KO", event_day) > 15

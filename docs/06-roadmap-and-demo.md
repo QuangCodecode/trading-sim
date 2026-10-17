@@ -15,7 +15,7 @@ a working version early and upgrade it.
 | Week 11–12 | 5 | Textual dashboard + Headline Lab (stand-out layer, D-17/D-19) | v3 |
 | Week 12 | 7 (+6 if ahead) | Polish, demo seed, Padlet, final tests | **Final** |
 
-> **Status 2026-10-18:** Phase 1 done (core + Diversification Lab + `lab mc`, 110 tests).
+> **Status 2026-10-18:** Phases 1–2 done (core, Diversification Lab + `lab mc`, events + explainer).
 > v1 scope agreed with Quang: Phases 1, 2 and 5b (Headline Lab on Laya, D-21) in the
 > rich REPL; Coach, What-if and the Textual dashboard follow after v1. If time runs
 > short, cut in this order: Phase 6 → What-if (4) → Textual (5a). Keep Headline Lab (5b),
@@ -48,11 +48,11 @@ a working version early and upgrade it.
 - [ ] README "Status" updated → **submit v1, show tutor, ask for their checklist**
 
 ### Phase 2 — Market Events + Explainer (E-02)
-- [ ] `data/events.json` (~12 templates) + `MarketEvent` + separate event RNG
-- [ ] Shocks applied in price generation; NEWS lines after `next`
-- [ ] `explainer.etf_move_breakdown` + `explain_event` + `news [DAY]`
-- [ ] "Your position changed by $X" line when holding affected stocks
-- [ ] Tests pass
+- [x] `data/events.json` (~12 templates) + `MarketEvent` + separate event RNG
+- [x] Shocks applied in price generation; NEWS lines after `next`
+- [x] `explainer.etf_move_breakdown` + `explain_event` + `news [DAY]`
+- [x] "Your position changed by $X" line when holding affected stocks
+- [x] Tests pass
 
 ### Phase 3 — Trade Coach (E-03)
 - [ ] `Tip` class, `RULES` list, six rules, max 2 tips after a trade

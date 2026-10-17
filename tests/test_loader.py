@@ -1,11 +1,12 @@
-"""Loading and validating data/universe.json."""
+"""Loading and validating data/universe.json and data/events.json."""
 
 import json
 
 import pytest
 
+from tradesim import config
 from tradesim.engine.errors import DataFileError
-from tradesim.loader import load_universe
+from tradesim.loader import load_events, load_universe
 
 GOOD = {
     "stocks": [
@@ -60,3 +61,35 @@ def test_bad_json_rejected(tmp_path):
     path.write_text("{not json")
     with pytest.raises(DataFileError):
         load_universe(path)
+
+
+def test_real_events_load_with_balanced_good_and_bad_news(universe):
+    stocks, _etfs = universe
+    catalogue = load_events(config.EVENTS_PATH, stocks)
+    good = [t for t in catalogue.templates if t["shock_min"] > 0]
+    assert len(catalogue.templates) >= 12
+    assert len(good) == len(catalogue.templates) / 2
+    assert "bad" in catalogue.negative_words
+
+
+def event_file(tmp_path, **changes):
+    template = {"id": "t", "scope": "sector", "target": "Tech", "shock_min": -0.1,
+                "shock_max": -0.05, "headline": "h", "explanation": "e"}
+    template.update(changes)
+    path = tmp_path / "events.json"
+    path.write_text(json.dumps({"templates": [template], "positive_words": [],
+                                "negative_words": []}))
+    return path
+
+
+@pytest.mark.parametrize("changes, message", [
+    ({"shock_min": -0.05, "shock_max": 0.05}, "all positive or all negative"),
+    ({"target": "Mining"}, "unknown sector"),
+    ({"scope": "stock", "target": "ZZZ"}, "unknown stock"),
+    ({"scope": "planet"}, "unknown scope"),
+    ({"shock_min": -0.01, "shock_max": -0.05}, "above"),
+])
+def test_bad_event_templates_rejected(universe, tmp_path, changes, message):
+    stocks, _etfs = universe
+    with pytest.raises(DataFileError, match=message):
+        load_events(event_file(tmp_path, **changes), stocks)
