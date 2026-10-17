@@ -1,0 +1,21 @@
+{
+  "stocks": [
+    {"symbol": "AAPL", "name": "Apple", "sector": "Tech",
+     "start_price": 180.0, "drift": 0.0006, "volatility": 0.018},
+    {"symbol": "NVDA", "name": "NVIDIA", "sector": "Tech",
+     "start_price": 120.0, "drift": 0.0010, "volatility": 0.032},
+    {"symbol": "XOM", "name": "Exxon Mobil", "sector": "Energy",
+     "start_price": 110.0, "drift": 0.0003, "volatility": 0.016},
+    {"symbol": "CVX", "name": "Chevron", "sector": "Energy",
+     "start_price": 150.0, "drift": 0.0003, "volatility": 0.017},
+    {"symbol": "KO", "name": "Coca-Cola", "sector": "Consumer",
+     "start_price": 60.0, "drift": 0.0002, "volatility": 0.010},
+    {"symbol": "WMT", "name": "Walmart", "sector": "Consumer",
+     "start_price": 70.0, "drift": 0.0003, "volatility": 0.012}
+  ],
+  "etfs": [
+    {"symbol": "MIX6", "name": "Mix-6 ETF", "base_value": 100.0,
+     "weights": {"AAPL": 0.20, "NVDA": 0.15, "XOM": 0.15,
+                 "CVX": 0.15, "KO": 0.15, "WMT": 0.20}}
+  ]
+}

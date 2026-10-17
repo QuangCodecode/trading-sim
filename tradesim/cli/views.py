@@ -1,0 +1,235 @@
+"""Build rich Tables/Panels from engine data. Views return renderables; app.py prints them."""
+
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+
+from tradesim import config
+from tradesim.cli import charts
+from tradesim.education.diversification_lab import LabResult, MonteCarloResult
+from tradesim.engine import analytics
+from tradesim.engine.game import Game
+from tradesim.engine.trade import Trade
+
+
+def signed(value: float, suffix: str = "", decimals: int = 2) -> Text:
+    """A number with +/− sign, green for gains and red for losses."""
+    colour = "green" if value > 0 else "red" if value < 0 else "white"
+    return Text(f"{value:+,.{decimals}f}{suffix}", style=colour)
+
+
+def money(value: float) -> str:
+    """$1,234.56"""
+    return f"${value:,.2f}"
+
+
+def day_line(game: Game) -> str:
+    """'Day 12 / 60' plus a game-over note at the end."""
+    end = "  (final day — game over)" if game.is_over() else ""
+    return f"[bold]Day {game.day} / {game.market.num_days}[/bold]{end}"
+
+
+def banner(game: Game) -> Panel:
+    """The startup panel with the simulated-prices disclaimer (N-07)."""
+    market = game.market
+    lines = (f"Learn to invest with [bold]{money(game.portfolio.starting_cash)}[/bold] of virtual cash.\n"
+             f"{market.num_days} trading days · {len(market.stocks)} stocks · "
+             f"{len(market.etfs)} ETF ({', '.join(market.etfs)})\n"
+             f"[yellow]Prices are SIMULATED. Not real data, not financial advice.[/yellow]\n"
+             f"Seed {market.seed} — run with --seed {market.seed} to replay this market.")
+    return Panel(lines, title="TradeSim", border_style="cyan", expand=False)
+
+
+def market_table(game: Game) -> Table:
+    """Every symbol with price, today's change and a sparkline of recent days."""
+    market, day = game.market, game.day
+    table = Table(title=day_line(game), title_justify="left")
+    for heading in ("Symbol", "Name", "Sector", "Price", "Today", "Last 10 days"):
+        table.add_column(heading, justify="right" if heading in ("Price", "Today") else "left")
+    start = max(0, day - config.SPARKLINE_DAYS + 1)
+    for symbol in market.symbols():
+        sector = "ETF" if market.is_etf(symbol) else market.stocks[symbol].sector
+        table.add_row(f"[cyan]{symbol}[/cyan]", market.name_of(symbol), sector,
+                      f"{market.price(symbol, day):,.2f}",
+                      signed(market.daily_change_pct(symbol, day), "%"),
+                      charts.sparkline(market.history(symbol, start, day)))
+    return table
+
+
+def quote_panel(game: Game, symbol: str) -> Panel:
+    """One symbol: price, day change, high/low so far and the player's holding."""
+    market, day = game.market, game.day
+    prices = market.history(symbol, 0, day)
+    body = Text.assemble(
+        f"Price      {money(prices[-1])}   Today ", signed(market.daily_change_pct(symbol, day), "%"),
+        f"\nHigh/low   {money(max(prices))} / {money(min(prices))} since day 0",
+        f"\nYou hold   {game.portfolio.qty_held(symbol)} shares")
+    return Panel(body, title=f"{symbol} — {market.name_of(symbol)}", expand=False)
+
+
+def chart_panel(game: Game, symbols: list[str]) -> Panel:
+    """Price chart from day 0 to today; two symbols are scaled to 'value of $100'."""
+    histories = {s: game.market.history(s, 0, game.day) for s in symbols}
+    if len(symbols) > 1:
+        histories = {s: analytics.value_of(100, h) for s, h in histories.items()}
+        title = " vs ".join(f"{s} ({m})" for s, m in zip(symbols, charts.MARKERS))
+        title += " — value of $100 invested on day 0"
+    else:
+        title = f"{symbols[0]} price"
+    return Panel("\n".join(charts.line_chart(histories)), title=title, expand=False)
+
+
+def etf_panel(game: Game, symbol: str) -> Panel:
+    """ETF holdings: launch weight, sector and each holding's share of the fund today."""
+    market, etf = game.market, game.market.etfs[symbol]
+    today, start = market.stock_prices_on(game.day), market.stock_prices_on(0)
+    grown = {s: w * today[s] / start[s] for s, w in etf.weights.items()}
+    table = Table()
+    for heading in ("Holding", "Sector", "Launch weight", "Share today"):
+        table.add_column(heading, justify="left" if heading in ("Holding", "Sector") else "right")
+    for s, weight in etf.weights.items():
+        table.add_row(f"[cyan]{s}[/cyan]", market.stocks[s].sector, f"{weight:.0%}",
+                      f"{grown[s] / sum(grown.values()):.1%}")
+    explain = (f"An ETF is one share that holds a basket of companies. {symbol} = "
+               f"{config.ETF_BASE_VALUE:.0f} × the weighted average of each holding's price "
+               f"relative to day 0, so a 10% drop in one stock with a 15% weight moves "
+               f"{symbol} only about 1.5%.")
+    return Panel(Group(table, Text(explain, style="italic")),
+                 title=f"{symbol} — {etf.name} · {money(market.price(symbol, game.day))}",
+                 expand=False)
+
+
+def trade_message(trade: Trade, cash: float) -> str:
+    """One-line confirmation after a buy or sell."""
+    verb = "Bought" if trade.side == "BUY" else "Sold"
+    text = (f"[green]✓ {verb} {trade.qty} [cyan]{trade.symbol}[/cyan] @ {money(trade.price)} "
+            f"= {money(trade.value())} + {money(trade.fee)} fee.[/green]  Cash: {money(cash)}")
+    if trade.side == "SELL":
+        text += f"  Realised P&L: {trade.realised_pnl:+,.2f}"
+    return text
+
+
+def portfolio_view(game: Game) -> Group:
+    """Holdings table plus the cash/equity/P&L summary (C-07, C-08)."""
+    account, prices = game.portfolio, game.current_prices()
+    weights = account.weights(prices)
+    table = Table(title=day_line(game), title_justify="left")
+    for heading in ("Symbol", "Qty", "Avg cost", "Price", "Value", "Unrealised", "Weight"):
+        table.add_column(heading, justify="left" if heading == "Symbol" else "right")
+    for symbol, pos in account.positions.items():
+        pnl = pos.unrealised_pnl(prices[symbol])
+        pct = pnl / (pos.avg_cost * pos.qty) * 100
+        table.add_row(f"[cyan]{symbol}[/cyan]", str(pos.qty), f"{pos.avg_cost:,.2f}",
+                      f"{prices[symbol]:,.2f}", f"{pos.market_value(prices[symbol]):,.2f}",
+                      Text.assemble(signed(pnl), " (", signed(pct, "%", 1), ")"),
+                      f"{weights[symbol]:.1%}")
+    table.add_row("Cash", "", "", "", f"{account.cash:,.2f}", "", f"{weights['CASH']:.1%}",
+                  end_section=True)
+    return Group(table, pnl_summary(game))
+
+
+def pnl_summary(game: Game) -> Text:
+    """Equity and the three P&L parts that always add up to the total."""
+    account, prices = game.portfolio, game.current_prices()
+    return Text.assemble(
+        f"Equity {money(account.equity(prices))}   Total P&L ", signed(account.total_pnl(prices)),
+        " (", signed(account.total_return_pct(prices), "%"), ")\n",
+        "Realised ", signed(account.realised_pnl), "   Unrealised ",
+        signed(account.unrealised_pnl(prices)), "   Fees ", signed(-account.fees_paid))
+
+
+def history_table(trades: list[Trade]) -> Table | str:
+    """The trade log (C-09)."""
+    if not trades:
+        return "No trades yet. Try: buy MIX6 10"
+    table = Table(title="Trade history", title_justify="left")
+    for heading in ("#", "Day", "Side", "Symbol", "Qty", "Price", "Fee", "Realised"):
+        table.add_column(heading, justify="right")
+    for t in trades:
+        realised = signed(t.realised_pnl) if t.side == "SELL" else Text("")
+        table.add_row(str(t.trade_id), str(t.day), t.side, f"[cyan]{t.symbol}[/cyan]", str(t.qty),
+                      f"{t.price:,.2f}", f"{t.fee:,.2f}", realised)
+    return table
+
+
+def lab_view(result: LabResult) -> Group:
+    """Diversification Lab: comparison table, chart and verdict (E-01)."""
+    s, e = result.stock, result.etf
+    table = Table(title=(f"Diversification Lab — {money(result.amount)} in {s.symbol} vs "
+                         f"{money(result.amount)} in {e.symbol}, day {result.start_day} → {result.end_day}"),
+                  title_justify="left")
+    table.add_column("")
+    table.add_column(s.symbol, justify="right")
+    table.add_column(e.symbol, justify="right")
+    table.add_row("Final value", money(s.final_value), money(e.final_value))
+    table.add_row("Total return", signed(s.total_return * 100, "%", 1), signed(e.total_return * 100, "%", 1))
+    table.add_row("Daily swing (volatility)", f"{s.volatility:.1%}", f"{e.volatility:.1%}")
+    table.add_row("Worst day", signed(s.worst_day * 100, "%", 1), signed(e.worst_day * 100, "%", 1))
+    table.add_row("Max drawdown", f"{s.max_drawdown:.1%}", f"{e.max_drawdown:.1%}")
+    chart = "\n".join(charts.line_chart({s.symbol: s.values, e.symbol: e.values}))
+    legend = f"{s.symbol} (*)  vs  {e.symbol} (o) — value of {money(result.amount)}"
+    verdict = Text("\n".join(f"▸ {line}" for line in result.verdict), style="yellow")
+    note = Text("Thought experiment: fractional shares, no fees.", style="dim")
+    return Group(table, Text(legend, style="bold"), chart, verdict, note)
+
+
+def monte_carlo_view(result: MonteCarloResult) -> Panel:
+    """Monte Carlo lab: average return and big-loss odds over many simulated markets."""
+    table = Table()
+    table.add_column("")
+    for symbol in (result.stock_symbol, result.etf_symbol):
+        table.add_column(symbol, justify="right")
+    rows = [result.stock_returns, result.etf_returns]
+    table.add_row("Average return", *[signed(result.average(r) * 100, "%", 1) for r in rows])
+    table.add_row(f"Lost more than {-result.loss_threshold:.0%}",
+                  *[f"{result.big_loss_share(r):.0%} of runs" for r in rows])
+    table.add_row("Best run", *[signed(max(r) * 100, "%", 1) for r in rows])
+    table.add_row("Worst run", *[signed(min(r) * 100, "%", 1) for r in rows])
+    stock_odds = result.big_loss_share(result.stock_returns)
+    lesson = (f"▸ In {result.runs} simulated markets, {result.stock_symbol} lost more than "
+              f"{-result.loss_threshold:.0%} in {stock_odds:.0%} of them; {result.etf_symbol} in "
+              f"{result.big_loss_share(result.etf_returns):.0%}. Diversification is about odds, not luck.")
+    return Panel(Group(table, Text(lesson, style="yellow")),
+                 title=f"Monte Carlo Lab — {result.runs} markets", expand=False)
+
+
+def report_panel(game: Game) -> Panel:
+    """End-of-game report (also `report` mid-game) (C-09)."""
+    account, prices = game.portfolio, game.current_prices()
+    title = "Final report" if game.is_over() else "Report so far"
+    body = Text.assemble(
+        f"Starting cash   {money(account.starting_cash)}\n",
+        f"Equity          {money(account.equity(prices))}  (",
+        signed(account.total_return_pct(prices), "%"), ")\n",
+        "Realised ", signed(account.realised_pnl), " · Unrealised ",
+        signed(account.unrealised_pnl(prices)), " · Fees ", signed(-account.fees_paid), "\n",
+        best_and_worst(game),
+        f"Max drawdown    {analytics.max_drawdown(game.equity_history):.1%}   "
+        f"Trades {len(account.trades)}")
+    return Panel(body, title=f"{title} — Day {game.day}", expand=False)
+
+
+def best_and_worst(game: Game) -> Text:
+    """'Best holding AAPL +14.2%  Worst XOM −6.1%' over currently held positions."""
+    prices = game.current_prices()
+    returns = {s: (prices[s] / p.avg_cost - 1) * 100 for s, p in game.portfolio.positions.items()}
+    if not returns:
+        return Text("No open holdings\n")
+    best = max(returns, key=returns.get)
+    worst = min(returns, key=returns.get)
+    return Text.assemble(f"Best holding    {best} ", signed(returns[best], "%", 1),
+                         f"   Worst {worst} ", signed(returns[worst], "%", 1), "\n")
+
+
+def help_view(commands: dict[str, tuple[str, str]], topic: str | None) -> Table | str:
+    """All commands, or the usage of one."""
+    if topic:
+        usage, description = commands[topic]
+        return f"[bold]{usage}[/bold] — {description}"
+    table = Table(title="Commands (case doesn't matter)", title_justify="left")
+    table.add_column("Command", style="cyan")
+    table.add_column("What it does")
+    for usage, description in commands.values():
+        table.add_row(usage, description)
+    return table
