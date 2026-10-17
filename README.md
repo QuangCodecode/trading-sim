@@ -60,6 +60,8 @@ pip install -r requirements.txt -r requirements-dev.txt
 python3 tools/download_model.py   # once: Laya AI weights (~808 MB, git-ignored)
 python3 main.py --seed 42
 ```
+Or with [uv](https://docs.astral.sh/uv/) (installs everything from `pyproject.toml` automatically):
+`uv run tools/download_model.py` once, then `uv run main.py --seed 42` · tests: `uv run pytest`.
 Try: `buy nvda 40` · `buy mix6 20` · `next 25` · `news 21` · `lab` · `lab mc` · `hl`.
 Without the model download the game still works; the Headline Lab uses the saved answers in
 `data/sentiment_cache.json` and the keyword counter.
