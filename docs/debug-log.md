@@ -32,3 +32,13 @@ Cause:    `parse_headline_text` treated "nothing left after stripping quotes" th
           "no text typed" and returned `[]`; my first test had encoded that wrong behaviour.
 Fix:      only a bare `hl` returns `[]`; empty quoted text raises the usage error.
 Test:     test_empty_quoted_headline_shows_usage
+
+## Bug 4 — `uv run main.py` crashed with ModuleNotFoundError: rich
+Symptom:  `uv run main.py --seed 42` printed "Removed virtual environment … Creating virtual
+          environment" and then crashed with `ModuleNotFoundError: No module named 'rich'`.
+Traceback / failing assert: `tradesim/cli/app.py`, line 5, `from rich.console import Console`
+Cause:    the dependencies were only in requirements.txt. uv reads `pyproject.toml`
+          (`dependencies = []`) and `.python-version` (3.11), so it replaced the pip-built
+          3.14 venv with an empty 3.11 one.
+Fix:      list rich/textual/laya in `pyproject.toml` (+ a `dev` group for pytest) and commit `uv.lock`.
+Test:     manual: `uv run main.py --seed 42` plays and `uv run pytest` → 144 passed on Python 3.11.
