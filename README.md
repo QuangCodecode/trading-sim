@@ -42,6 +42,13 @@ wreck a single stock.**
 - **What-if Replay** — replay the *same* market with different strategies (hold the ETF,
   all-in one stock, panic-sell, buy-the-dip) and compare with what you actually did
 
+**AI feature — Headline Lab** (`hl`)
+- Every news headline is read two ways: a simple **keyword counter** and **Laya**, an
+  open-source AI decision model running **locally on your CPU** (no internet, no API key)
+- Both are scored against what the price really did. Tricky headlines like *"Walmart sales
+  not as bad as feared"* fool the counter but not the AI (keywords 12/16 vs Laya 15/16)
+- Type your own: `hl "Tesla stock plunges after weak delivery numbers"`
+
 **Optional extensions** — challenge scenarios, save/load, short selling (see roadmap).
 
 ## Quick start
@@ -50,8 +57,12 @@ wreck a single stock.**
 cd FinalProject/trading-sim
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt -r requirements-dev.txt
+python3 tools/download_model.py   # once: Laya AI weights (~808 MB, git-ignored)
 python3 main.py --seed 42
 ```
+Try: `buy nvda 40` · `buy mix6 20` · `next 25` · `news 21` · `lab` · `lab mc` · `hl`.
+Without the model download the game still works; the Headline Lab uses the saved answers in
+`data/sentiment_cache.json` and the keyword counter.
 Type `help` in the game for all commands. Run tests with `pytest`.
 
 ## Documentation
@@ -68,4 +79,5 @@ Type `help` in the game for all commands. Run tests with `pytest`.
 
 ## Status
 
-See the checklist in `docs/06-roadmap-and-demo.md`. Current phase: **Phase 5b — Headline Lab (AI)** (Phases 1–2 done).
+See the checklist in `docs/06-roadmap-and-demo.md`. **v1 done**: core game, Diversification Lab, market news + explainer, Headline Lab (AI).
+Next: Trade Coach, What-if Replay, Textual dashboard.

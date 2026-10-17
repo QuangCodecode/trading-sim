@@ -130,10 +130,11 @@ def optional_command(name: str, args: list[str]) -> list:
 
 def parse_headline_text(line: str) -> list[str]:
     """hl alone → []; hl "TEXT" → [TEXT] with quotes removed and original case kept."""
-    text = line.strip().split(maxsplit=1)[1] if len(line.split()) > 1 else ""
-    text = text.strip().strip('"').strip("'").strip()
-    if not text:
+    if len(line.split()) == 1:
         return []
+    text = line.strip().split(maxsplit=1)[1].strip('"').strip("'").strip()
+    if not text:
+        raise usage_error("headlines")
     if len(text) > config.MAX_HEADLINE_LENGTH:
         raise CommandError(f"Headlines must be {config.MAX_HEADLINE_LENGTH} characters or fewer.")
     return [text]

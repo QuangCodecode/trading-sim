@@ -53,7 +53,11 @@ def test_headline_text_keeps_case_and_drops_quotes():
     assert parse('hl "Walmart sales not as bad as feared"') == \
         Command("headlines", ["Walmart sales not as bad as feared"])
     assert parse("headlines") == Command("headlines", [])
-    assert parse('hl ""') == Command("headlines", [])
+
+
+def test_empty_quoted_headline_shows_usage():
+    with pytest.raises(CommandError, match="Usage: headlines"):
+        parse('hl ""')
 
 
 def test_headline_too_long_rejected():

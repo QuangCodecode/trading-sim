@@ -1,0 +1,66 @@
+{
+  "AI spending boom lifts tech shares": {
+    "confidence": 0.9665,
+    "label": "positive"
+  },
+  "Apple faces probe over app store fees": {
+    "confidence": 0.9348,
+    "label": "negative"
+  },
+  "Central bank surprises with rate cut": {
+    "confidence": 0.5259,
+    "label": "negative"
+  },
+  "Chip export curbs hit tech stocks": {
+    "confidence": 0.9095,
+    "label": "negative"
+  },
+  "Coca-Cola recalls drinks in three countries": {
+    "confidence": 0.9861,
+    "label": "negative"
+  },
+  "Consumer spending slows as prices bite": {
+    "confidence": 0.7803,
+    "label": "negative"
+  },
+  "Exxon hit with record fine over oil spill": {
+    "confidence": 0.9731,
+    "label": "negative"
+  },
+  "NVIDIA smashes earnings expectations": {
+    "confidence": 0.9209,
+    "label": "positive"
+  },
+  "OPEC cuts output, oil prices jump": {
+    "confidence": 0.7827,
+    "label": "positive"
+  },
+  "Oil glut fears ease as demand recovers": {
+    "confidence": 0.9134,
+    "label": "positive"
+  },
+  "Oil prices slump on weak demand": {
+    "confidence": 0.9429,
+    "label": "negative"
+  },
+  "Recession fears rattle markets": {
+    "confidence": 0.9547,
+    "label": "negative"
+  },
+  "Record highs fail to hold as chip rally fizzles": {
+    "confidence": 0.719,
+    "label": "negative"
+  },
+  "Shoppers splurge as retail sales surge": {
+    "confidence": 0.9538,
+    "label": "positive"
+  },
+  "Strong jobs report boosts confidence": {
+    "confidence": 0.9535,
+    "label": "positive"
+  },
+  "Walmart sales not as bad as feared": {
+    "confidence": 0.6147,
+    "label": "positive"
+  }
+}

@@ -15,7 +15,7 @@ a working version early and upgrade it.
 | Week 11–12 | 5 | Textual dashboard + Headline Lab (stand-out layer, D-17/D-19) | v3 |
 | Week 12 | 7 (+6 if ahead) | Polish, demo seed, Padlet, final tests | **Final** |
 
-> **Status 2026-10-18:** Phases 1–2 done (core, Diversification Lab + `lab mc`, events + explainer).
+> **Status 2026-10-18:** v1 done — Phases 1, 2 and 5b (Headline Lab on local Laya AI).
 > v1 scope agreed with Quang: Phases 1, 2 and 5b (Headline Lab on Laya, D-21) in the
 > rich REPL; Coach, What-if and the Textual dashboard follow after v1. If time runs
 > short, cut in this order: Phase 6 → What-if (4) → Textual (5a). Keep Headline Lab (5b),
@@ -71,13 +71,14 @@ a working version early and upgrade it.
 - [ ] Every Phase 1–4 command works from the command box; errors show red, no crash
 
 **5b Headline Lab (E-05)**
-- [ ] Settle Q-06 (Jev route + schema) and Q-07 (instructor OK with an API) first
-- [ ] `events.json`: word lists + ~4 tricky headlines (§3.7)
-- [ ] `education/headline_lab.py`: `Verdict`, `keyword_verdict`, `truth`, `score` (pure)
-- [ ] `ai/sentiment.py`: cache → Jev (`urllib`, `JEV_TIMEOUT_S`) → `None` on any failure
-- [ ] `headlines` / `hl "TEXT"` command + Headlines tab + Jev label on the news line
-- [ ] `tools/warm_cache.py`; commit a warmed `data/sentiment_cache.json`
-- [ ] Tests: fake classifier, offline fallback, corrupt cache, tricky-headline keyword misses
+- [x] Settle Q-06 → Laya local (D-21). Q-07 (instructor OK with an AI model) still open
+- [x] `events.json`: word lists + ~4 tricky headlines (§3.7)
+- [x] `education/headline_lab.py`: `Verdict`, `keyword_verdict`, `truth`, `score` (pure)
+- [x] `ai/sentiment.py`: cache → Laya (local, lazy) → `None` on any failure
+- [x] `headlines` / `hl "TEXT"` command + Laya label on the news line
+- [ ] Headlines tab (with 5a Textual)
+- [x] `tools/warm_cache.py`; commit a warmed `data/sentiment_cache.json`
+- [x] Tests: fake classifier, offline fallback, corrupt cache, tricky-headline keyword misses
 
 ### Phase 6 — Extensions (pick in this order; skip freely)
 - [ ] X-02 Save/load (small, useful for the demo — start the demo from a save)
@@ -106,7 +107,7 @@ Run `python3 main.py --seed <DEMO_SEED>` (or `load demo`). Terminal font large, 
 | 0:15–0:45 | "Six stocks, three sectors, and MIX6 — an ETF whose price is a weighted average of all six." | `market` · `etf` |
 | 0:45–1:10 | "I'll go big on NVIDIA… and put a little in the ETF." | `buy nvda 60` → coach warns about concentration (Phase 3) · `buy mix6 20` · `portfolio` |
 | 1:10–1:40 | "Let's skip ahead." News hits. "Tech dropped 8%, but the ETF only 2.7% — here's exactly why." | `next 7` · `news` |
-| 1:40–2:05 | "Can AI read the news? A word counter says 'not as bad as feared' is bad news; the Jev AI gets it right." | `hl` *(Headlines tab)* |
+| 1:40–2:05 | "Can AI read the news? A word counter says 'not as bad as feared' is bad news; the Laya AI — running right here on my laptop, no internet — gets it right." | `hl` · `hl "Walmart sales not as bad as feared"` |
 | 2:05–2:35 | "The Diversification Lab compares both on the same days." | `lab` |
 | 2:35–2:50 | "What if I'd made different choices? Same market, eight strategies." | `whatif` |
 | 2:50–3:00 | "Pure Python, one AI call, <N> automated tests, works offline. What I learned: diversification is about odds, not luck." | *(show `pytest -q` summary screenshot)* |

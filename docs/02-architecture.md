@@ -8,7 +8,7 @@
 | Terminal UI | [`rich`](https://rich.readthedocs.io) | Coloured tables, panels, green/red P&L — a much better 3-min demo for one dependency |
 | Dashboard (Phase 5) | [`textual`](https://textual.textualize.io) | Same authors as rich. Tabs, buttons and mouse in the terminal; it displays our rich renderables directly, so `views.py` is reused (D-17) |
 | Charts | Own ASCII/Unicode line chart in `cli/charts.py` | No extra dependency, and a small algorithm Quang can explain (scale values → rows) |
-| AI sentiment (Phase 5) | TypeSafe **Jev** over HTTPS via stdlib `urllib.request` + `json` | No SDK dependency; only `tradesim/ai/` touches the network (D-19, D-20) |
+| AI sentiment (Phase 5) | **Laya** (`convaiinnovations/laya`, open weights) run locally on the CPU via the `laya` package (D-21) | Free, offline after one download; only `tradesim/ai/` touches the model (D-20) |
 | Randomness | `random.Random(seed)` | Reproducible markets (needed for replay, tests, demos) |
 | Maths | `statistics` (`mean`, `stdev`), `math` | Standard library — evidences LO11 |
 | Data files | JSON via `json` + `pathlib` | Stock universe, events, scenarios, save files — separates data from code |
@@ -16,7 +16,7 @@
 | Tests | `pytest` (+ `pytest-cov` optional) | Readable asserts, `approx` for floats |
 | Packaging | none — plain folder with `requirements.txt` | Keep it simple |
 
-`requirements.txt`: `rich>=13`, `textual>=1.0` · `requirements-dev.txt`: `pytest>=8`, `pytest-cov>=5`
+`requirements.txt`: `rich>=13`, `textual>=1.0`, `laya>=0.4` (pulls in torch + transformers, D-21) · `requirements-dev.txt`: `pytest>=8`, `pytest-cov>=5`
 
 ## 2.2 Folder structure
 
@@ -29,10 +29,13 @@ trading-sim/
 ├── data/
 │   ├── universe.json            # stocks + ETFs (symbols, sectors, params, weights)
 │   ├── events.json              # Phase 2: event catalogue (headline templates, shocks)
-│   ├── sentiment_cache.json     # Phase 5: Jev labels keyed by headline text (committed, pre-warmed for the demo)
+│   ├── sentiment_cache.json     # Phase 5: Laya labels keyed by headline text (committed, pre-warmed for the demo)
 │   └── scenarios.json           # X-01: challenge scenarios
 ├── tools/
+│   ├── download_model.py       # fetch Laya weights into models/laya (D-21)
+│   ├── warm_cache.py            # label every events.json headline with Laya
 │   └── find_demo_seed.py        # search seeds for a dramatic demo market (see 06)
+├── models/laya/                 # Laya weights, ~808 MB (git-ignored)
 ├── saves/                       # X-02: save files (git-ignored)
 ├── tradesim/
 │   ├── __init__.py
@@ -56,8 +59,8 @@ trading-sim/
 │   │   ├── strategies.py            # E-04 preset strategies
 │   │   ├── whatif.py                # E-04 replay engine
 │   │   └── headline_lab.py          # E-05 keyword counter + scoring (gets the AI as a function argument)
-│   ├── ai/                      # Phase 5 — the ONLY package that uses the network
-│   │   └── sentiment.py         # Jev call + JSON cache + offline fallback
+│   ├── ai/                      # Phase 5 — the ONLY package that touches the AI model
+│   │   └── sentiment.py         # SentimentClassifier: cache → Laya → None
 │   ├── extensions/              # X-01..X-03, only if time allows
 │   │   ├── scenarios.py
 │   │   └── storage.py
@@ -107,7 +110,7 @@ trading-sim/
 **Rule:** arrows point *down* only. `engine` never imports `education` or `cli`;
 `education` never imports `cli`. This makes every calculation testable without a terminal.
 
-**AI rule (Phase 5):** `ai/sentiment.py` is the only module that touches the network or
+**AI rule (Phase 5):** `ai/sentiment.py` is the only module that touches the Laya model or
 `data/sentiment_cache.json`. `education/headline_lab.py` never imports it. `cli` passes
 `sentiment.classify` *in* as a function argument, and tests pass a fake one. AI output
 is display-only and never feeds `Market` (D-20).
@@ -115,7 +118,7 @@ is display-only and never feeds `Market` (D-20).
 ```
  cli ──passes classify──► education/headline_lab.score(headlines, classify)
   │                                   ▲
-  └──imports──► ai/sentiment.classify ┘   (cache hit → no network; no key/timeout → None)
+  └──imports──► ai/sentiment.classify ┘   (cache hit → no model load; no model / any error → None)
 ```
 
 ## 2.4 Class design
@@ -313,10 +316,12 @@ class Verdict:  label ("positive"|"negative"|"neutral"), confidence (0..1), sour
 def keyword_verdict(headline: str) -> Verdict: ...        # counts words from data/events.json lists
 def truth(event: MarketEvent) -> str: ...                 # sign of event.shock → "positive"/"negative"
 def score(events: list[MarketEvent], classify) -> LabScore: ...   # rows + hits per source
-#   classify(headline) -> Verdict | None   (None = AI unavailable → Jev column shows "—")
+#   classify(headline) -> Verdict | None   (None = AI unavailable → Laya column shows "—")
 
-# ai/sentiment.py  (E-05) — the only network code
-def classify(headline: str) -> Verdict | None: ...        # cache → Jev → None on any failure
+# ai/sentiment.py  (E-05) — the only model code; the loader is injected so tests use a fake
+class SentimentClassifier(cache_path, model_dir, load_model=load_laya):
+    def cached(headline) -> Verdict | None: ...           # cache only (used by NEWS lines)
+    def classify(headline) -> Verdict | None: ...         # cache → Laya → None on any failure
 ```
 
 Result objects (`LabResult`, `ReplayResult`, …) are small plain classes holding numbers
@@ -356,8 +361,7 @@ DIP_TRIGGER = 0.02            # Buy-the-dip strategy: MIX6 daily fall that trigg
 DIP_TRANCHE = 0.20            # ... invests 20% of starting cash each time
 DCA_INTERVAL_DAYS = 5
 # Headline Lab (E-05)
-JEV_API_KEY_ENV = "JEV_API_KEY"   # read with os.environ.get; never hard-code a key
-JEV_TIMEOUT_S = 3                 # give up and fall back after 3 s
-SENTIMENT_CACHE_PATH = "data/sentiment_cache.json"
-NEUTRAL_BAND = 0.60               # confidence below this → shown as "neutral"
+SENTIMENT_CACHE_PATH = DATA_DIR / "sentiment_cache.json"
+MODEL_DIR = PROJECT_ROOT / "models" / "laya"
+NEUTRAL_BAND = 0.60               # AI probability below this → shown dimmed as "unsure" (D-22)
 ```

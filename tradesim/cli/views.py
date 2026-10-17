@@ -7,8 +7,9 @@ from rich.text import Text
 
 from tradesim import config
 from tradesim.cli import charts
-from tradesim.education import explainer
+from tradesim.education import explainer, headline_lab
 from tradesim.education.diversification_lab import LabResult, MonteCarloResult
+from tradesim.education.headline_lab import LabScore, Verdict
 from tradesim.engine import analytics
 from tradesim.engine.events import MarketEvent
 from tradesim.engine.game import Game
@@ -220,6 +221,8 @@ def best_and_worst(game: Game) -> Text:
         return Text("No open holdings\n")
     best = max(returns, key=returns.get)
     worst = min(returns, key=returns.get)
+    if best == worst:
+        return Text.assemble(f"Holding         {best} ", signed(returns[best], "%", 1), "\n")
     return Text.assemble(f"Best holding    {best} ", signed(returns[best], "%", 1),
                          f"   Worst {worst} ", signed(returns[worst], "%", 1), "\n")
 
@@ -234,12 +237,15 @@ def move_list(game: Game, event: MarketEvent) -> Text:
     return Text(", ").join(parts[:-1]) + Text(" · ") + parts[-1]
 
 
-def news_lines(game: Game, events: list[MarketEvent]) -> list:
-    """Short NEWS lines shown after `next`, plus how each one hit the player's holdings."""
+def news_lines(game: Game, events: list[MarketEvent], ai_lookup) -> list:
+    """Short NEWS lines shown after `next`, plus how each one hit the player's holdings.
+
+    `ai_lookup(headline)` returns a saved AI Verdict or None (it never loads the model).
+    """
     lines = []
     for event in events:
         lines.append(Text.assemble((f"NEWS day {event.day}: {event.headline}", "bold yellow"),
-                                   "  ", move_list(game, event)))
+                                   "  ", move_list(game, event), ai_tag(ai_lookup(event.headline))))
         for symbol, change in explainer.position_impacts(game.market, game.portfolio, event).items():
             lines.append(Text.assemble(f"   Your {symbol} position changed by ", signed(change),
                                        " that day."))
@@ -278,6 +284,78 @@ def breakdown_table(game: Game, day: int) -> Table:
     table.add_row(f"[bold]{etf}[/bold]", signed(game.market.daily_change_pct(etf, day), "%"),
                   "100%", signed(total), end_section=True)
     return table
+
+
+def ai_tag(verdict: Verdict | None) -> Text:
+    """'  · Laya: negative 91%' after a news line, or nothing if the AI has no answer."""
+    if verdict is None:
+        return Text("")
+    return Text.assemble("  · Laya: ", ai_text(verdict))
+
+
+def ai_text(verdict: Verdict | None) -> Text:
+    """'positive 91%', dimmed with '(unsure)' below NEUTRAL_BAND; '—' when offline."""
+    if verdict is None:
+        return Text("—", style="dim")
+    colour = "green" if verdict.label == headline_lab.POSITIVE else "red"
+    if verdict.is_unsure():
+        return Text(f"{verdict} (unsure)", style=f"dim {colour}")
+    return Text(str(verdict), style=colour)
+
+
+def mark(hit: bool) -> Text:
+    """✔ for a correct call, ✗ for a wrong one."""
+    return Text(" ✔", style="green") if hit else Text(" ✗", style="red")
+
+
+def biggest_move(game: Game, event: MarketEvent) -> tuple[str, float]:
+    """The affected stock that moved most on the event's day, and its % move."""
+    moves = {s: game.market.daily_change_pct(s, event.day)
+             for s in explainer.affected_symbols(game.market, event)}
+    symbol = max(moves, key=lambda s: abs(moves[s]))
+    return symbol, moves[symbol]
+
+
+def headline_lab_view(game: Game, result: LabScore) -> Group:
+    """Every headline so far: keyword counter vs Laya vs what really happened (E-05)."""
+    etf = config.LAB_DEFAULT_ETF
+    table = Table(title=f"Headline Lab — day 1 → {game.day}", title_justify="left")
+    for heading in ("Day", "Headline", "Keywords", "Laya (AI)", "Real move", etf):
+        table.add_column(heading, justify="right" if heading in ("Day", "Real move", etf) else "left")
+    for row in result.rows:
+        symbol, move = biggest_move(game, row.event)
+        ai_cell = ai_text(row.ai) + (mark(row.ai_hit()) if row.ai else Text(""))
+        table.add_row(str(row.event.day), row.event.headline,
+                      Text(row.keywords.label) + mark(row.keyword_hit()), ai_cell,
+                      Text.assemble(f"{symbol} ", signed(move, "%", 1)),
+                      signed(game.market.daily_change_pct(etf, row.event.day), "%", 1))
+    total = len(result.rows)
+    ai_score = f"{result.ai_hits}/{total}" if result.ai_online else "offline"
+    score_line = Text(f"Score: keywords {result.keyword_hits}/{total} · Laya {ai_score}", style="bold")
+    lessons = [f"▸ {line}" for line in result.lessons()] + [f"▸ {price_lesson(game, result)}"]
+    tip = Text('Try your own: hl "Walmart sales not as bad as feared"', style="dim")
+    return Group(table, score_line, Text("\n".join(lessons), style="yellow"), tip)
+
+
+def price_lesson(game: Game, result: LabScore) -> str:
+    """'Sentiment isn't price…' using the headline with the biggest stock move."""
+    etf = config.LAB_DEFAULT_ETF
+    event = max((row.event for row in result.rows), key=lambda e: abs(biggest_move(game, e)[1]))
+    symbol, move = biggest_move(game, event)
+    etf_move = game.market.daily_change_pct(etf, event.day)
+    return (f"Sentiment isn't price: even a correct call doesn't say how much. On day {event.day} "
+            f"{symbol} moved {move:+.1f}%, but {etf} only {etf_move:+.1f}%.")
+
+
+def own_headline_view(text: str, keywords: Verdict, ai: Verdict | None) -> Panel:
+    """Both verdicts for a headline the player typed (no truth: it never happened)."""
+    ai_line = ai_text(ai) if ai else Text("— AI offline (run: python3 tools/download_model.py)", style="dim")
+    body = Text.assemble(
+        "Keyword counter  ", keywords.label, (f"   counted: {keywords.reason}", "dim"), "\n",
+        "Laya (AI)        ", ai_line, "\n\n",
+        ("The counter only adds up listed words. Laya reads the whole sentence — "
+         "watch for 'not', 'less than feared', 'fail to'.", "italic"))
+    return Panel(body, title=f'"{text}"', expand=False)
 
 
 def help_view(commands: dict[str, tuple[str, str]], topic: str | None) -> Table | str:

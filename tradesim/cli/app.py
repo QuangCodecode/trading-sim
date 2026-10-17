@@ -5,8 +5,9 @@ import random
 from rich.console import Console
 
 from tradesim import config
+from tradesim.ai.sentiment import SentimentClassifier
 from tradesim.cli import parser, views
-from tradesim.education import diversification_lab
+from tradesim.education import diversification_lab, headline_lab
 from tradesim.engine.errors import CommandError, TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.market import Market
@@ -80,12 +81,18 @@ def do_history(game: Game, args: list) -> object:
     return views.history_table(game.portfolio.trades)
 
 
-def do_next(game: Game, args: list) -> object:
+def no_ai(headline: str) -> None:
+    """Stand-in classifier when no AI was given: always 'unavailable'."""
+    return None
+
+
+def do_next(game: Game, args: list, ai: SentimentClassifier | None) -> object:
     asked = args[0] if args else 1
     start = game.day
     events = game.advance(asked)
     moved = game.day - start
-    output = [views.market_table(game)] + views.news_lines(game, events)
+    lookup = ai.cached if ai else no_ai
+    output = [views.market_table(game)] + views.news_lines(game, events, lookup)
     if moved < asked:
         output.append(f"[yellow]Only {moved} day(s) were left — the game has ended.[/yellow]")
     if game.is_over():
@@ -115,6 +122,19 @@ def do_news(game: Game, args: list) -> object:
     return views.news_view(game, day)
 
 
+def do_headlines(game: Game, args: list, ai: SentimentClassifier | None) -> object:
+    classify = ai.classify if ai else no_ai
+    words = load_events(config.EVENTS_PATH, game.market.stocks)
+    if args:
+        keywords = headline_lab.keyword_verdict(args[0], words.positive_words, words.negative_words)
+        return views.own_headline_view(args[0], keywords, classify(args[0]))
+    events = [e for day in range(1, game.day + 1) for e in game.market.events_on(day)]
+    if not events:
+        return 'No news so far. Try next 5, or: hl "Chipmaker beats forecasts"'
+    result = headline_lab.score(events, classify, words.positive_words, words.negative_words)
+    return views.headline_lab_view(game, result)
+
+
 def do_report(game: Game, args: list) -> object:
     return views.report_panel(game)
 
@@ -126,11 +146,15 @@ def do_help(game: Game, args: list) -> object:
 HANDLERS = {
     "market": do_market, "quote": do_quote, "chart": do_chart, "etf": do_etf,
     "buy": do_buy, "sell": do_sell, "portfolio": do_portfolio, "history": do_history,
-    "next": do_next, "news": do_news, "lab": do_lab, "report": do_report, "help": do_help,
+    "news": do_news, "lab": do_lab, "report": do_report, "help": do_help,
 }
 
 
-def run_command(game: Game, line: str) -> list:
+# These commands also need the AI classifier (the rest only need the game).
+AI_HANDLERS = {"next": do_next, "headlines": do_headlines}
+
+
+def run_command(game: Game, line: str, ai: SentimentClassifier | None = None) -> list:
     """Run one input line and return what to print. Never raises TradeSimError."""
     try:
         command = parser.parse(line)
@@ -138,24 +162,36 @@ def run_command(game: Game, line: str) -> list:
             return []
         if command.name == "quit":
             return ["Cancelled — still playing."]
-        if command.name not in HANDLERS:
+        if command.name in AI_HANDLERS:
+            result = AI_HANDLERS[command.name](game, command.args, ai)
+        elif command.name in HANDLERS:
+            result = HANDLERS[command.name](game, command.args)
+        else:
             raise CommandError(f"{command.name} isn't available yet.")
-        result = HANDLERS[command.name](game, command.args)
     except TradeSimError as error:
         return [f"[red]✗ {error}[/red]"]
     return result if isinstance(result, list) else [result]
 
 
+def is_command(line: str, name: str) -> bool:
+    """True if `line` starts with command `name` or one of its aliases."""
+    words = line.split()
+    if not words:
+        return False
+    word = words[0].lower()
+    return word == name or parser.ALIASES.get(word) == name
+
+
 def is_quit(line: str) -> bool:
     """True if the player typed quit (or its alias exit)."""
-    words = line.split()
-    return bool(words) and words[0].lower() in ("quit", "exit")
+    return is_command(line, "quit")
 
 
 def run(seed: int | None, days: int) -> None:
     """Play one game in the terminal until the player quits."""
     console = Console()
     game = new_game(seed, days)
+    ai = SentimentClassifier()
     console.print(views.banner(game))
     console.print("Type [cyan]help[/cyan] for commands, [cyan]market[/cyan] to see prices, "
                   "[cyan]lab[/cyan] to learn about diversification.")
@@ -166,7 +202,13 @@ def run(seed: int | None, days: int) -> None:
                 break
         except (KeyboardInterrupt, EOFError):
             break  # Ctrl+C / Ctrl+D: leave gracefully, no traceback
-        for renderable in run_command(game, line):
+        if is_command(line, "headlines"):
+            # Laya loads on first use (~10 s on a CPU), so show a spinner while the AI works.
+            with console.status("Asking Laya AI… (the first time loads the model, ~10 s)"):
+                output = run_command(game, line, ai)
+        else:
+            output = run_command(game, line, ai)
+        for renderable in output:
             console.print(renderable)
     console.print()
     console.print(views.report_panel(game))

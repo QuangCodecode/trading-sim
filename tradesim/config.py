@@ -38,9 +38,8 @@ CHART_HEIGHT = 12
 CHART_WIDTH = 60
 SPARKLINE_DAYS = 10
 
-# Headline Lab (E-05)
-JEV_API_KEY_ENV = "JEV_API_KEY"   # read with os.environ.get; never hard-code a key
-JEV_TIMEOUT_S = 3                 # give up and fall back after 3 s
+# Headline Lab (E-05) — Laya runs locally, so no API key is needed (D-21)
 SENTIMENT_CACHE_PATH = DATA_DIR / "sentiment_cache.json"
-NEUTRAL_BAND = 0.60               # confidence below this → shown as "neutral"
+MODEL_DIR = PROJECT_ROOT / "models" / "laya"   # downloaded by tools/download_model.py (D-21)
+NEUTRAL_BAND = 0.60               # AI probability below this → shown dimmed as "unsure" (D-22)
 MAX_HEADLINE_LENGTH = 200

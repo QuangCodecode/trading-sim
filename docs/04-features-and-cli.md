@@ -28,7 +28,7 @@ the Phase 1 REPL.
 | `news [DAY]` | | 2 | Today's (or a past day's) events + ETF move breakdown |
 | `coach` | | 3 | Session review tips |
 | `whatif` | `replay` | 4 | Strategy comparison table + chart |
-| `headlines` | `hl` | 5 | Headline Lab: every headline so far, keyword vs Jev verdict vs real move, plus the hit score |
+| `headlines` | `hl` | 5 | Headline Lab: every headline so far, keyword vs Laya (AI) verdict vs real move, plus the hit score |
 | `hl "TEXT"` | | 5 | Classify your own headline with both methods (no truth column — it never happened) |
 | `scenario list` / `scenario start NAME` | | X-01 | Challenge mode |
 | `save [NAME]` / `load NAME` | | X-02 | Save/restore game |
@@ -237,37 +237,47 @@ Show at most 2 tips after a trade (so it's not naggy); `coach` shows all session
 2. For each headline:
    - The keyword verdict comes from `headline_lab.keyword_verdict`: (positive hits − negative hits).
      Over 0 is positive, under 0 is negative, 0 is neutral.
-   - The Jev verdict comes from `sentiment.classify`: a label plus a probability.
-     A probability below `NEUTRAL_BAND` shows as neutral.
+   - The Laya verdict comes from `SentimentClassifier.classify`: a two-label Choice
+     (positive / negative) plus the probability of its pick (D-22). Below `NEUTRAL_BAND`
+     it is shown dimmed as "(unsure)" but still scored.
    - The truth is the sign of the event's shock.
 3. Score each method: hits out of headlines.
 4. Closing lesson by rule:
-   - Jev beat the keywords: "Words like 'bad' or 'record' can point the wrong way. Reading the whole sentence matters."
+   - Laya beat the keywords: "Words like 'bad' or 'record' can point the wrong way. Reading the whole sentence matters."
    - They tied: "Simple headlines are easy. Watch the tricky ones."
-   - Always: "Sentiment isn't price. Even correct news calls don't tell you *how much* a stock moves, and the ETF moved less than either."
-5. **AI offline** (no key, network error, timeout, bad response):
-   - The Jev column shows `—` and the score line says "AI offline: keyword counter only".
+   - Laya did worse: "The AI missed more than the word counter this time — it reads language well, but it isn't magic."
+   - Always: "Sentiment isn't price: even a correct call doesn't say how much. On day D
+     SYMBOL moved X%, but MIX6 only Y%." (uses the headline with the biggest stock move)
+5. **AI offline** (model not downloaded, `laya` not installed, load error, odd answer):
+   - The Laya column shows `—` and the score line says "AI offline: keyword counter only".
    - Never a traceback (N-08).
 6. **Own headline:** both verdicts are shown, with no truth and no score. Empty text gives "Usage: hl \"TEXT\"".
    - Text over 200 characters is rejected by the parser.
+   - The keyword line lists the words it counted (e.g. `bad −, feared −`) so the player sees *why* it failed.
+7. NEWS lines after `next` end with `· Laya: negative 91%` when the answer is cached (never loads the model).
 
-**Mock-up**
+**Real output** (`--seed 42`, `next 60`, `hl`)
 ```
- Headline Lab — day 1 → 24                 Keywords   Jev (AI)      Real move
- d3  Chip export curbs hit tech stocks     negative   negative 97%  NVDA −8.1% ✔✔
- d9  Walmart sales not as bad as feared    negative✗  positive 88%  WMT  +4.2% ✗✔
- d15 Oil glut fears ease as demand recovers negative✗  positive 91%  XOM  +3.0% ✗✔
- d21 Record highs fail to hold…            positive✗  negative 84%  AAPL −5.5% ✗✔
- Score: keywords 1/4 · Jev 4/4
- ▸ Words like "bad" or "record" can point the wrong way. Reading the whole sentence matters.
- ▸ Sentiment isn't price: MIX6 moved only −1.6% on day 3.
+ Day  Headline                                         Keywords    Laya (AI)       Real move   MIX6
+  21  Record highs fail to hold as chip rally fizzles  positive ✗  negative 72% ✔  AAPL -6.3%  -1.1%
+  41  Exxon hit with record fine over oil spill        negative ✔  negative 97% ✔   XOM -8.9%  -1.4%
+  47  AI spending boom lifts tech shares               positive ✔  positive 97% ✔  NVDA +14.4% +5.2%
+  …
+ Score: keywords 4/6 · Laya 6/6
+ ▸ Words like 'bad' or 'record' can point the wrong way. Reading the whole sentence matters.
+ ▸ Sentiment isn't price: even a correct call doesn't say how much. On day 47 NVDA moved +14.4%, but MIX6 only +5.2%.
 ```
+Over all 16 templates: keywords 12/16, Laya 15/16 (its one miss, "Central bank surprises
+with rate cut", is shown as `negative 53% (unsure)`).
 
-**Caching and demo safety (D-20)**
-- `classify` checks `data/sentiment_cache.json` first; a hit is used and the network is never touched.
-- On a miss it calls Jev with `JEV_TIMEOUT_S`, stores the answer, then saves the cache.
-- `tools/warm_cache.py` labels every `events.json` headline once before the demo, so the live demo needs no Wi-Fi.
-- The API key comes only from the `JEV_API_KEY` environment variable. Never print it, log it or commit it.
+**Caching and demo safety (D-20, D-21, D-23)**
+- `classify` checks `data/sentiment_cache.json` first; a hit is used and the model is never loaded.
+- On a miss it loads Laya from `models/laya/` (once, ~10 s, CLI shows a spinner), asks it,
+  stores the answer, then saves the cache. `HF_HUB_OFFLINE=1` is set so it never goes online.
+- `tools/download_model.py` fetches the weights once; `tools/warm_cache.py` labels every
+  `events.json` headline, so the game shows Laya's answers even on a machine without the model.
+- Headlines the player types with `hl "TEXT"` are cached too (so `git status` will show the
+  cache file changed after playing; revert it before committing if you don't want them).
 
 ## 4.4 Textual dashboard layout (Phase 5, D-17)
 
@@ -278,7 +288,7 @@ Show at most 2 tips after a trade (so it's not naggy); `coach` shows all session
 │ │ AAPL 186.40 +1.21% ▃▄▄▅▆▅▆▇▇█      │ │ NVDA (*) vs MIX6 (o)               │ │
 │ │ NVDA 110.05 −8.34% ▅▆▇█▇▆▆▅▄▁      │ │ … click a row to chart it          │ │
 │ └────────────────────────────────────┘ └────────────────────────────────────┘ │
-│ NEWS d12: Chip export curbs hit tech stocks — Jev: negative 97%               │
+│ NEWS d12: Chip export curbs hit tech stocks — Laya: negative 91%              │
 │ > buy nvda 20_                                   [Next day ▶] [Next 5 ▶▶]      │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -326,6 +336,6 @@ negative qty.
 - `chart` with a flat series (hi == lo) — no division by zero.
 - Very long input, unicode input, only spaces.
 - `--days 1` game; `--seed` negative or huge.
-- `hl` with no API key, a network timeout, a malformed Jev reply, or a corrupt `sentiment_cache.json`.
+- `hl` with no downloaded model, `laya` not installed, an odd model answer, or a corrupt `sentiment_cache.json`.
   Each falls back to the keyword counter (a corrupt cache is treated as empty).
 - `hl ""`, `hl` with 201+ characters, `hl` before any news.
