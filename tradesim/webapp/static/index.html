@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TradeSim — live market simulator</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css">
+  <script type="module" src="/js/app.js"></script>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <a class="brand" href="#board" aria-label="TradeSim home">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="#1f6fd1"/>
+        <path d="M6 22l6-7 5 4 8-10" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="25" cy="9" r="2.6" fill="#0ecb81"/></svg>
+      <span>TradeSim<small>simulated prices · learn risk-free</small></span>
+    </a>
+    <div class="index-strip" id="index-strip" aria-label="Market indices"></div>
+    <div class="clock-box" aria-label="Market clock">
+      <div class="clock"><b id="clock-time">16:00</b><span class="phase" id="clock-phase">CLOSED</span></div>
+      <div class="clock when" id="clock-when">Day 0</div>
+      <div class="session-bar" title="Trading session progress"><div id="session-progress"></div></div>
+    </div>
+    <div class="controls">
+      <button class="btn primary start-btn" id="btn-start">▶ Open market</button>
+      <div class="seg" role="group" aria-label="Market speed" id="speed">
+        <button data-speed="0" title="Pause (space)">⏸</button>
+        <button data-speed="1" title="1 tick (5 minutes) per second">1×</button>
+        <button data-speed="2">2×</button>
+        <button data-speed="5">5×</button>
+        <button data-speed="15">15×</button>
+      </div>
+      <button class="btn" id="btn-close-day" title="Run the rest of today's session at once">To close ⏭</button>
+      <div class="menu-wrap">
+        <button class="btn" id="btn-skip" aria-haspopup="true" aria-expanded="false">Skip days ▾</button>
+        <div class="menu" id="skip-menu" role="menu">
+          <button role="menuitem" data-skip="1">Skip 1 day</button>
+          <button role="menuitem" data-skip="5">Skip 5 days (a week)</button>
+          <button role="menuitem" data-skip="20">Skip 20 days (a month)</button>
+          <button role="menuitem" data-skip="999">Skip to the end</button>
+        </div>
+      </div>
+    </div>
+    <a class="account-chip" href="#portfolio" id="account-chip" aria-label="Your account">
+      <div class="sub secondary">Your money</div>
+      <div class="eq" id="chip-equity">$10,000.00</div>
+      <div class="sub" id="chip-pnl">+0.00%</div>
+    </a>
+  </header>
+
+  <nav class="sidenav" aria-label="Pages">
+    <a href="#board" data-page="board"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16"/></svg><span class="label">Board</span></a>
+    <a href="#trade" data-page="trade"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="5" y="8" width="4" height="7"/><rect x="15" y="6" width="4" height="9"/></svg><span class="label">Trade</span></a>
+    <a href="#portfolio" data-page="portfolio"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/></svg><span class="label">Portfolio</span></a>
+    <a href="#news" data-page="news"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="15" height="15" rx="2"/><path d="M18 9h3v9a2 2 0 0 1-2 2M7 9h7M7 13h7M7 16h4"/></svg><span class="label">News</span></a>
+    <a href="#leverage" data-page="leverage"><svg viewBox="0 0 24 24"><path d="M3 18h18M6 18l6-10 6 10M12 8V4"/><circle cx="12" cy="4" r="1"/></svg><span class="label">Leverage</span><span class="new">NEW</span></a>
+    <a href="#labs" data-page="labs"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4.5 18.5A1.7 1.7 0 0 0 6 21h12a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7 15h10"/></svg><span class="label">Labs</span></a>
+    <a href="#robo" data-page="robo"><svg viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="11" rx="2"/><path d="M12 4v4M9 13h.01M15 13h.01M9 16h6"/><circle cx="12" cy="3.5" r="1"/></svg><span class="label">Robo</span></a>
+    <a href="#learn" data-page="learn"><svg viewBox="0 0 24 24"><path d="M2 8l10-5 10 5-10 5z"/><path d="M6 10v5c3 2.5 9 2.5 12 0v-5"/></svg><span class="label">Learn</span></a>
+    <a href="#challenges" data-page="challenges"><svg viewBox="0 0 24 24"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M7 6H4a3 3 0 0 0 3 4M17 6h3a3 3 0 0 1-3 4"/></svg><span class="label">Goals</span></a>
+    <a href="#terminal" data-page="terminal"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/></svg><span class="label">Terminal</span></a>
+  </nav>
+
+  <main id="main">
+    <section class="page page-board" id="page-board" data-page="board" hidden></section>
+    <section class="page" id="page-trade" data-page="trade" hidden></section>
+    <section class="page" id="page-portfolio" data-page="portfolio" hidden></section>
+    <section class="page" id="page-news" data-page="news" hidden></section>
+    <section class="page" id="page-leverage" data-page="leverage" hidden></section>
+    <section class="page" id="page-labs" data-page="labs" hidden></section>
+    <section class="page" id="page-robo" data-page="robo" hidden></section>
+    <section class="page" id="page-learn" data-page="learn" hidden></section>
+    <section class="page" id="page-challenges" data-page="challenges" hidden></section>
+    <section class="page" id="page-terminal" data-page="terminal" hidden></section>
+  </main>
+
+  <footer class="statusbar">
+    <span class="status-item" id="status-fear">Fear gauge</span>
+    <span class="status-item" id="status-goal"></span>
+    <span class="ticker" id="status-ticker"><span>Prices are simulated. This is a learning game, not financial advice.</span></span>
+    <span class="status-item muted" id="status-seed"></span>
+  </footer>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="board-hint" id="board-hint">Double-click to trade</div>
+<dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+</body>
+</html>
