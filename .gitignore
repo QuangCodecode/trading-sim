@@ -6,3 +6,4 @@ __pycache__/
 saves/
 .DS_Store
 models/
+verify-out/
