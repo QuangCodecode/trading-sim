@@ -4,28 +4,49 @@ import random
 
 from rich.console import Console
 
+import difflib
+
 from tradesim import config
 from tradesim.ai.sentiment import SentimentClassifier
-from tradesim.cli import parser, views
-from tradesim.education import diversification_lab, headline_lab
+from tradesim.cli import insights, parser, progress, views
+from tradesim.education import (academy, achievements, coach, diversification_lab,
+                                headline_lab, leverage_lab, whatif)
+from tradesim.education.challenges import Challenge
+from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine.errors import CommandError, TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.market import Market
 from tradesim.engine.portfolio import Portfolio
-from tradesim.loader import load_events, load_universe
+from tradesim.loader import (load_challenges, load_events, load_list, load_regimes, load_robo,
+                             load_universe)
 
 MAX_SEED = 1_000_000
 
 
-def new_game(seed: int | None, days: int) -> Game:
-    """Load the universe and build a fresh market and portfolio."""
+def new_game(seed: int | None, days: int, challenge: Challenge | None = None) -> Game:
+    """Load the data files and build a fresh market and portfolio.
+
+    A challenge brings its own seed, length and starting trades (education/challenges.py).
+    """
+    if challenge is not None:
+        seed, days = challenge.seed, challenge.days
     if seed is None:
         # A seed is chosen once and shown, so any game can be replayed with --seed.
         seed = random.SystemRandom().randrange(MAX_SEED)
     stocks, etfs = load_universe(config.UNIVERSE_PATH)
     templates = load_events(config.EVENTS_PATH, stocks).templates
-    market = Market(stocks, etfs, seed, days, templates)
-    return Game(market, Portfolio(config.STARTING_CASH, config.FEE_PER_TRADE))
+    regimes = load_regimes(config.REGIMES_PATH)
+    market = Market(stocks, etfs, seed, days, templates, regime_model=regimes,
+                    prehistory_days=config.PREHISTORY_DAYS)
+    game = Game(market, Portfolio(config.STARTING_CASH, config.FEE_PER_TRADE), challenge)
+    for line in challenge.start if challenge else []:
+        execute(game, line)
+    return game
+
+
+def robo_model() -> RoboAnalyst:
+    """The trained Robo-analyst (a small JSON file, so loading it each time is cheap)."""
+    return load_robo(config.ROBO_MODEL_PATH)
 
 
 def check_symbol(game: Game, symbol: str) -> str:
@@ -35,11 +56,24 @@ def check_symbol(game: Game, symbol: str) -> str:
 
 
 def do_market(game: Game, args: list) -> object:
-    return views.market_table(game)
+    return views.market_table(game, pick_symbols(game, args[0]) if args else None)
+
+
+def pick_symbols(game: Game, word: str) -> list[str]:
+    """The stocks of the sector starting with `word` ("tech", "real"…), or the ETFs for "etf"."""
+    market = game.market
+    if word in ("etf", "etfs"):
+        return list(market.etfs)
+    sectors = [name for name in market.sectors() if name.lower().startswith(word)]
+    if not sectors:
+        names = ", ".join(name.lower() for name in market.sectors())
+        raise TradeSimError(f'No sector called "{word}". Try market etf or one of: {names}')
+    return [symbol for symbol, stock in market.stocks.items() if stock.sector == sectors[0]]
 
 
 def do_quote(game: Game, args: list) -> object:
-    return views.quote_panel(game, check_symbol(game, args[0]))
+    symbol = check_symbol(game, args[0])
+    return views.quote_panel(game, symbol, insights.outlook_text(robo_model(), game, symbol))
 
 
 def do_chart(game: Game, args: list) -> object:
@@ -60,7 +94,7 @@ def do_buy(game: Game, args: list) -> object:
         if qty == 0:
             raise TradeSimError(f"You can't afford even 1 {symbol} right now.")
     trade = game.buy(symbol, qty)
-    return views.trade_message(trade, game.portfolio.cash)
+    return trade_output(game, trade)
 
 
 def do_sell(game: Game, args: list) -> object:
@@ -70,7 +104,13 @@ def do_sell(game: Game, args: list) -> object:
         if qty == 0:
             raise TradeSimError(f"You don't hold any {symbol}.")
     trade = game.sell(symbol, qty)
-    return views.trade_message(trade, game.portfolio.cash)
+    return trade_output(game, trade)
+
+
+def trade_output(game: Game, trade) -> list:
+    """The confirmation line plus any Trade Coach tips about it (E-03)."""
+    tips = coach.review_trade(game, trade)
+    return [views.trade_message(trade, game.portfolio.cash)] + [insights.tip_line(t) for t in tips]
 
 
 def do_portfolio(game: Game, args: list) -> object:
@@ -88,16 +128,55 @@ def no_ai(headline: str) -> None:
 
 def do_next(game: Game, args: list, ai: SentimentClassifier | None) -> object:
     asked = args[0] if args else 1
-    start = game.day
+    start, calls = game.day, len(game.margin_calls)
     events = game.advance(asked)
     moved = game.day - start
     lookup = ai.cached if ai else no_ai
-    output = [views.market_table(game)] + views.news_lines(game, events, lookup)
+    output = [views.recap_panel(game, start)] + views.news_lines(game, events, lookup)
+    output += [insights.margin_call_line(trades) for trades in game.margin_calls[calls:]]
     if moved < asked:
         output.append(f"[yellow]Only {moved} day(s) were left — the game has ended.[/yellow]")
-    if game.is_over():
-        output.append(views.report_panel(game))
+    return output + game_over_lines(game)
+
+
+def game_over_lines(game: Game) -> list:
+    """The final report and what to do next, once the last day has closed (else nothing)."""
+    if not game.is_over():
+        return []
+    # Award the last-day badges first, so the report's badge count includes them.
+    output = [progress.badge_line(b) for b in achievements.newly_unlocked(game)]
+    return output + report_bundle(game) + ["Curious how other choices would have done? Type "
+                                           "[cyan]whatif[/cyan]. Play again: [cyan]new[/cyan] or "
+                                           "[cyan]challenge[/cyan]."]
+
+
+def do_tick(game: Game, args: list) -> object:
+    start, calls = game.day, len(game.margin_calls)
+    news = game.step(args[0] if args else 1)
+    news_tick = game.market.session(start + 1).news_tick
+    output = [insights.tick_line(game)] + [insights.breaking_line(e, news_tick) for e in news]
+    output += [insights.margin_call_line(trades) for trades in game.margin_calls[calls:]]
+    if game.day > start:
+        output += [views.recap_panel(game, start)] + game_over_lines(game)
     return output
+
+
+def do_leverage(game: Game, args: list) -> object:
+    if not args:
+        return insights.leverage_view(game)
+    game.set_leverage(args[0])
+    return [f"[green]✓ You may now borrow up to {args[0]}× your own money.[/green]",
+            insights.leverage_view(game)]
+
+
+def do_levlab(game: Game, args: list) -> object:
+    market = game.market
+    symbol = check_symbol(game, args[0]) if args else market.index_symbol()
+    start = max(market.first_day, game.day - config.LEVERAGE_LAB_DAYS)
+    if start == game.day:
+        raise TradeSimError("Play a few days first (next 5): the lab replays days you have seen.")
+    runs = leverage_lab.compare(market, symbol, start, game.day)
+    return insights.leverage_lab_view(symbol, runs, leverage_lab.lessons(runs, symbol), start, game.day)
 
 
 def do_lab(game: Game, args: list) -> object:
@@ -105,7 +184,8 @@ def do_lab(game: Game, args: list) -> object:
         stock = args[1] if len(args) > 1 else config.LAB_DEFAULT_STOCK
         market = game.market
         result = diversification_lab.monte_carlo(market.stocks, market.etfs, stock,
-                                                 config.LAB_DEFAULT_ETF, market.seed)
+                                                 config.LAB_DEFAULT_ETF, market.seed,
+                                                 regime_model=market.regime_model)
         return views.monte_carlo_view(result)
     stock = args[0] if args else config.LAB_DEFAULT_STOCK
     etf = args[1] if len(args) > 1 else config.LAB_DEFAULT_ETF
@@ -135,8 +215,101 @@ def do_headlines(game: Game, args: list, ai: SentimentClassifier | None) -> obje
     return views.headline_lab_view(game, result)
 
 
+def report_bundle(game: Game) -> list:
+    """The report, challenge goals, coach tips and (at the end) the market's story."""
+    output = [views.report_panel(game)]
+    goals = progress.goals_panel(game)
+    if goals:
+        output.append(goals)
+    output += [insights.tip_line(tip) for tip in coach.review_session(game)]
+    if game.is_over():
+        output.append(insights.story_view(game))
+    return output
+
+
 def do_report(game: Game, args: list) -> object:
-    return views.report_panel(game)
+    return report_bundle(game)
+
+
+def do_robo(game: Game, args: list) -> object:
+    analyst = robo_model()
+    if args:
+        return insights.symbol_robo_view(game, analyst, check_symbol(game, args[0]))
+    return insights.robo_view(game, analyst)
+
+
+def do_story(game: Game, args: list) -> object:
+    return insights.story_view(game)
+
+
+def do_sectors(game: Game, args: list) -> object:
+    return insights.sectors_view(game)
+
+
+def do_coach(game: Game, args: list) -> object:
+    return insights.coach_view(coach.review_session(game))
+
+
+def do_whatif(game: Game, args: list) -> object:
+    if game.day == 0:
+        raise TradeSimError("Nothing to replay on day 0. Play a few days first: next 5")
+    results = whatif.compare_strategies(game, robo_model())
+    index = game.market.index_symbol()
+    return insights.whatif_view(results, whatif.lessons(results, index), game.day, index)
+
+
+def do_badges(game: Game, args: list) -> object:
+    return progress.badges_view(game)
+
+
+def do_challenge(game: Game, args: list) -> object:
+    catalogue = load_challenges(config.CHALLENGES_PATH)
+    if not args:
+        return progress.challenges_view(catalogue)
+    if args[0] not in catalogue:
+        close = difflib.get_close_matches(args[0], list(catalogue), n=1)
+        hint = f' Did you mean "challenge {close[0]}"?' if close else " Type challenge to list them."
+        raise TradeSimError(f'There is no challenge called "{args[0]}".{hint}')
+    fresh = new_game(None, config.GAME_DAYS, catalogue[args[0]])
+    restart(game, fresh)
+    return [progress.challenge_intro(game), views.market_table(game)]
+
+
+def restart(game: Game, fresh: Game) -> None:
+    """Swap a finished or abandoned game for `fresh`, keeping the same Game object.
+
+    Every front end holds on to its Game, so changing it in place means `new` and
+    `challenge` work the same in the REPL, agent mode and the web app.
+    """
+    game.reset(fresh.market, fresh.portfolio, fresh.challenge)
+    game.equity_history = fresh.equity_history
+    game.badges = fresh.badges
+
+
+def do_new(game: Game, args: list) -> object:
+    restart(game, new_game(args[0] if args else None, config.GAME_DAYS))
+    return [views.banner(game), views.quick_start()]
+
+
+def do_learn(game: Game, args: list) -> object:
+    terms = load_list(config.GLOSSARY_PATH, "terms")
+    if not args:
+        return progress.glossary_view(terms)
+    return progress.term_view(academy.find_term(terms, args[0]))
+
+
+def do_quiz(game: Game, args: list) -> object:
+    questions = load_list(config.QUIZ_PATH, "questions")
+    number, question = academy.current_question(questions, len(game.quiz_results))
+    if not args:
+        return progress.question_view(number, question, len(questions), quiz_score(game))
+    game.quiz_results.append(academy.mark(question, args[0]))
+    return progress.answer_view(question, game.quiz_results[-1], quiz_score(game))
+
+
+def quiz_score(game: Game) -> tuple[int, int]:
+    """(right answers, questions answered)."""
+    return sum(game.quiz_results), len(game.quiz_results)
 
 
 def do_help(game: Game, args: list) -> object:
@@ -147,6 +320,10 @@ HANDLERS = {
     "market": do_market, "quote": do_quote, "chart": do_chart, "etf": do_etf,
     "buy": do_buy, "sell": do_sell, "portfolio": do_portfolio, "history": do_history,
     "news": do_news, "lab": do_lab, "report": do_report, "help": do_help,
+    "robo": do_robo, "story": do_story, "sectors": do_sectors, "coach": do_coach,
+    "whatif": do_whatif, "badges": do_badges, "challenge": do_challenge, "new": do_new,
+    "learn": do_learn, "quiz": do_quiz, "tick": do_tick, "leverage": do_leverage,
+    "levlab": do_levlab,
 }
 
 
@@ -154,23 +331,30 @@ HANDLERS = {
 AI_HANDLERS = {"next": do_next, "headlines": do_headlines}
 
 
+def execute(game: Game, line: str, ai: SentimentClassifier | None = None) -> list:
+    """Run one input line and return what to print. Raises TradeSimError on bad input."""
+    command = parser.parse(line)
+    if command is None:
+        return []
+    if command.name == "quit":
+        return ["Cancelled — still playing."]
+    if command.name in AI_HANDLERS:
+        result = AI_HANDLERS[command.name](game, command.args, ai)
+    elif command.name in HANDLERS:
+        result = HANDLERS[command.name](game, command.args)
+    else:
+        raise CommandError(f"{command.name} isn't available yet.")
+    output = result if isinstance(result, list) else [result]
+    game.commands_used.add(command.name)
+    return output + [progress.badge_line(b) for b in achievements.newly_unlocked(game)]
+
+
 def run_command(game: Game, line: str, ai: SentimentClassifier | None = None) -> list:
     """Run one input line and return what to print. Never raises TradeSimError."""
     try:
-        command = parser.parse(line)
-        if command is None:
-            return []
-        if command.name == "quit":
-            return ["Cancelled — still playing."]
-        if command.name in AI_HANDLERS:
-            result = AI_HANDLERS[command.name](game, command.args, ai)
-        elif command.name in HANDLERS:
-            result = HANDLERS[command.name](game, command.args)
-        else:
-            raise CommandError(f"{command.name} isn't available yet.")
+        return execute(game, line, ai)
     except TradeSimError as error:
         return [f"[red]✗ {error}[/red]"]
-    return result if isinstance(result, list) else [result]
 
 
 def is_command(line: str, name: str) -> bool:
@@ -193,8 +377,7 @@ def run(seed: int | None, days: int) -> None:
     game = new_game(seed, days)
     ai = SentimentClassifier()
     console.print(views.banner(game))
-    console.print("Type [cyan]help[/cyan] for commands, [cyan]market[/cyan] to see prices, "
-                  "[cyan]lab[/cyan] to learn about diversification.")
+    console.print(views.quick_start())
     while True:
         try:
             line = console.input("[bold cyan]> [/bold cyan]")
@@ -210,6 +393,8 @@ def run(seed: int | None, days: int) -> None:
             output = run_command(game, line, ai)
         for renderable in output:
             console.print(renderable)
+        if output:
+            console.print(views.status_bar(game), style="dim")
     console.print()
     console.print(views.report_panel(game))
     console.print("Thanks for playing!")

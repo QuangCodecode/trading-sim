@@ -5,12 +5,13 @@ class ETF:
     """An exchange-traded fund whose price is derived entirely from its holdings."""
 
     def __init__(self, symbol: str, name: str, weights: dict[str, float],
-                 base_value: float) -> None:
+                 base_value: float, description: str = "") -> None:
         """Store the fund's holdings; `weights` maps stock symbol → share of the fund (sum 1)."""
         self.symbol = symbol
         self.name = name
         self.weights = weights
         self.base_value = base_value
+        self.description = description
 
     def compute_price(self, prices: dict[str, float],
                       start_prices: dict[str, float]) -> float:

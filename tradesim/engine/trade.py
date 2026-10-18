@@ -7,8 +7,12 @@ class Trade:
     _next_id = 1  # class variable: shared by every Trade, so each one gets a unique id
 
     def __init__(self, day: int, side: str, symbol: str, qty: int, price: float,
-                 fee: float, realised_pnl: float = 0.0) -> None:
-        """Record a trade; `side` is "BUY" or "SELL"; `realised_pnl` is set for sells."""
+                 fee: float, realised_pnl: float = 0.0, tick: int = 0, note: str = "") -> None:
+        """Record a trade; `side` is "BUY" or "SELL"; `realised_pnl` is set for sells.
+
+        `tick` 0 means at `day`'s close; tick k means k five-minute ticks into the next day.
+        `note` explains trades the player didn't choose, e.g. "margin call".
+        """
         self.trade_id = Trade._next_id
         Trade._next_id += 1
         self.day = day
@@ -18,6 +22,8 @@ class Trade:
         self.price = price
         self.fee = fee
         self.realised_pnl = realised_pnl
+        self.tick = tick
+        self.note = note
 
     def value(self) -> float:
         """Shares × price, before the fee."""

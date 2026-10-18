@@ -30,7 +30,7 @@ def resample(values: list[float], width: int) -> list[float]:
 
 
 def line_chart(series: dict[str, list[float]], height: int = config.CHART_HEIGHT,
-               width: int = config.CHART_WIDTH) -> list[str]:
+               width: int = config.CHART_WIDTH, first_day: int = 0) -> list[str]:
     """Draw every series on one grid; returns `height` plot rows + axis + day labels.
 
     Each series gets its own marker (*, o, …); where two land on the same cell we draw #.
@@ -44,10 +44,10 @@ def line_chart(series: dict[str, list[float]], height: int = config.CHART_HEIGHT
         for x, value in enumerate(values):
             row = height - 1 - scale(value, low, high, height)  # row 0 is the top
             grid[row][x] = marker if grid[row][x] in (" ", marker) else OVERLAP
-    return add_axes(grid, low, high, days)
+    return add_axes(grid, low, high, days, first_day)
 
 
-def add_axes(grid: list[list[str]], low: float, high: float, days: int) -> list[str]:
+def add_axes(grid: list[list[str]], low: float, high: float, days: int, first_day: int = 0) -> list[str]:
     """Label the top, middle and bottom rows with values and add a day axis underneath."""
     height = len(grid)
     labels = {0: high, height // 2: (high + low) / 2, height - 1: low}
@@ -57,6 +57,6 @@ def add_axes(grid: list[list[str]], low: float, high: float, days: int) -> list[
         lines.append(f"{label:>{LABEL_WIDTH}} ┤" + "".join(cells))
     plot_width = len(grid[0])
     lines.append(" " * LABEL_WIDTH + " └" + "─" * plot_width)
-    end_label = f"day {days}"
-    lines.append(" " * (LABEL_WIDTH + 2) + "day 0".ljust(plot_width - len(end_label)) + end_label)
+    end_label = f"day {first_day + days}"
+    lines.append(" " * (LABEL_WIDTH + 2) + f"day {first_day}".ljust(plot_width - len(end_label)) + end_label)
     return lines

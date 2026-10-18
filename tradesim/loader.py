@@ -3,9 +3,12 @@
 import json
 from pathlib import Path
 
+from tradesim.education.challenges import Challenge
+from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine.errors import DataFileError
 from tradesim.engine.etf import ETF
 from tradesim.engine.events import SCOPES
+from tradesim.engine.regime import Regime, RegimeModel
 from tradesim.engine.stock import Stock
 
 WEIGHT_TOLERANCE = 1e-9
@@ -30,13 +33,14 @@ def load_universe(path: Path) -> tuple[dict[str, Stock], dict[str, ETF]]:
         for row in data["stocks"]:
             stock = Stock(row["symbol"], row["name"], row["sector"],
                           float(row["start_price"]), float(row["drift"]),
-                          float(row["volatility"]))
+                          float(row["volatility"]), float(row.get("beta", 1.0)),
+                          row.get("description", ""))
             _check_stock(stock, stocks)
             stocks[stock.symbol] = stock
         etfs = {}
         for row in data["etfs"]:
             etf = ETF(row["symbol"], row["name"], dict(row["weights"]),
-                      float(row["base_value"]))
+                      float(row["base_value"]), row.get("description", ""))
             _check_etf(etf, stocks, etfs)
             etfs[etf.symbol] = etf
     except (KeyError, TypeError, ValueError) as error:
@@ -111,3 +115,62 @@ def _check_template(template: dict, stocks: dict[str, Stock]) -> None:
         raise DataFileError(f"Event {name}: shock range must be all positive or all negative")
     if not template["headline"]:
         raise DataFileError(f"Event {name}: empty headline")
+
+
+def load_regimes(path: Path) -> RegimeModel:
+    """Load the market moods and check every probability table sums to 1 (§3.2)."""
+    data = read_json(path)
+    try:
+        regimes = {}
+        for row in data["regimes"]:
+            regimes[row["name"]] = Regime(row["name"], row["label"], row["emoji"],
+                                          float(row["drift"]), float(row["vol_scale"]),
+                                          dict(row["next"]), row.get("about", ""))
+        model = RegimeModel(regimes, dict(data["start"]))
+    except (KeyError, TypeError, ValueError) as error:
+        raise DataFileError(f"{path} has a missing or bad field: {error}")
+    _check_chances("start", model.start, regimes)
+    for regime in regimes.values():
+        _check_chances(regime.name, regime.transitions, regimes)
+    return model
+
+
+def _check_chances(name: str, chances: dict[str, float], regimes: dict[str, Regime]) -> None:
+    """Raise DataFileError unless `chances` names known regimes and adds up to 1."""
+    for target, chance in chances.items():
+        if target not in regimes:
+            raise DataFileError(f"Regime table {name} names unknown regime {target}")
+        if chance < 0:
+            raise DataFileError(f"Regime table {name} has a negative chance for {target}")
+    if abs(sum(chances.values()) - 1.0) > WEIGHT_TOLERANCE:
+        raise DataFileError(f"Regime table {name} chances sum to {sum(chances.values())}, not 1")
+
+
+def load_robo(path: Path) -> RoboAnalyst:
+    """Load the Robo-analyst's trained weights (made by tools/train_robo.py)."""
+    data = read_json(path)
+    try:
+        robo = RoboAnalyst.from_dict(data)
+    except (KeyError, TypeError) as error:
+        raise DataFileError(f"{path} has a missing or bad field: {error}")
+    for model in (robo.mood, robo.price):
+        if not len(model.names) == len(model.weights) == len(model.means) == len(model.scales):
+            raise DataFileError(f"{path}: a model's feature lists have different lengths")
+    return robo
+
+
+def load_challenges(path: Path) -> dict[str, Challenge]:
+    """Load the challenge scenarios, keyed by id."""
+    data = read_json(path)
+    try:
+        return {row["id"]: Challenge(row) for row in data["challenges"]}
+    except (KeyError, TypeError) as error:
+        raise DataFileError(f"{path} has a missing or bad field: {error}")
+
+
+def load_list(path: Path, key: str) -> list[dict]:
+    """A list of entries (glossary terms, quiz questions) from one data file."""
+    data = read_json(path)
+    if not isinstance(data.get(key), list):
+        raise DataFileError(f"{path} needs a list called {key}")
+    return data[key]

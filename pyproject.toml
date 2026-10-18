@@ -1,14 +1,21 @@
 [project]
 name = "trading-sim"
 version = "0.1.0"
-description = "Terminal trading simulator that teaches diversification (COMP9001 final project)"
+description = "Live trading simulator (web + terminal) that teaches diversification and leverage (COMP9001 final project)"
 readme = "README.md"
 requires-python = ">=3.11"
 # Keep in sync with requirements.txt / requirements-dev.txt (pip users).
-dependencies = ["rich>=13", "textual>=1.0", "laya>=0.4"]
+dependencies = [
+    "rich>=13",
+    "laya>=0.4",
+]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov>=5"]
+dev = [
+    "pytest>=8",
+    "pytest-cov>=5",
+    "websockets>=17.2",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

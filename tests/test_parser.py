@@ -37,7 +37,7 @@ def test_aliases():
     assert parse("? buy") == Command("help", ["buy"])
 
 
-@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "market now"])
+@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "portfolio now"])
 def test_bad_next_and_extra_args_rejected(line):
     with pytest.raises(CommandError):
         parse(line)

@@ -1,5 +1,6 @@
 """Build rich Tables/Panels from engine data. Views return renderables; app.py prints them."""
 
+from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
@@ -16,6 +17,48 @@ from tradesim.engine.game import Game
 from tradesim.engine.trade import Trade
 
 
+SECTOR_STYLES = {"Tech": "bright_blue", "Energy": "orange3", "Consumer": "magenta",
+                 "Finance": "green3", "Healthcare": "bright_cyan", "Communication": "orchid",
+                 "Industrials": "khaki1", "Materials": "tan", "Utilities": "light_sky_blue1",
+                 "Real Estate": "pale_green1", "ETF": "bold yellow"}
+REGIME_STYLES = {"bull": "green", "sideways": "yellow", "bear": "red", "crash": "bold magenta",
+                 "normal": "white"}
+LOGO = r"""
+ _____              _      ____  _
+|_   _| __ __ _  __| | ___/ ___|(_)_ __ ___
+  | || '__/ _` |/ _` |/ _ \___ \| | '_ ` _ \
+  | || | | (_| | (_| |  __/___) | | | | | | |
+  |_||_|  \__,_|\__,_|\___|____/|_|_| |_| |_|"""
+
+
+def sector_of(game: Game, symbol: str) -> str:
+    """The symbol's sector, or "ETF" for a fund."""
+    return "ETF" if game.market.is_etf(symbol) else game.market.stocks[symbol].sector
+
+
+def sector_text(sector: str) -> Text:
+    """A sector name in its own colour, so sectors are easy to tell apart at a glance."""
+    return Text(sector, style=SECTOR_STYLES.get(sector, "white"))
+
+
+def fear_label(fear: float) -> tuple[str, str]:
+    """(word, colour) for a fear-gauge reading, like the real VIX bands."""
+    if fear < config.FEAR_CALM:
+        return "calm", "green"
+    if fear < config.FEAR_UNEASY:
+        return "uneasy", "yellow"
+    if fear < config.FEAR_PANIC:
+        return "nervous", "dark_orange"
+    return "panic", "bold red"
+
+
+def fear_text(game: Game) -> Text:
+    """'Fear 14 (calm)' coloured by level."""
+    fear = game.market.fear_index(game.day)
+    word, colour = fear_label(fear)
+    return Text(f"Fear {fear:.0f} ({word})", style=colour)
+
+
 def signed(value: float, suffix: str = "", decimals: int = 2) -> Text:
     """A number with +/− sign, green for gains and red for losses."""
     colour = "green" if value > 0 else "red" if value < 0 else "white"
@@ -23,8 +66,8 @@ def signed(value: float, suffix: str = "", decimals: int = 2) -> Text:
 
 
 def money(value: float) -> str:
-    """$1,234.56"""
-    return f"${value:,.2f}"
+    """$1,234.56, or −$1,234.56 for a debt (the sign goes before the $)."""
+    return f"−${-value:,.2f}" if value < 0 else f"${value:,.2f}"
 
 
 def day_line(game: Game) -> str:
@@ -36,51 +79,168 @@ def day_line(game: Game) -> str:
 def banner(game: Game) -> Panel:
     """The startup panel with the simulated-prices disclaimer (N-07)."""
     market = game.market
-    lines = (f"Learn to invest with [bold]{money(game.portfolio.starting_cash)}[/bold] of virtual cash.\n"
-             f"{market.num_days} trading days · {len(market.stocks)} stocks · "
-             f"{len(market.etfs)} ETF ({', '.join(market.etfs)})\n"
-             f"[yellow]Prices are SIMULATED. Not real data, not financial advice.[/yellow]\n"
-             f"Seed {market.seed} — run with --seed {market.seed} to replay this market.")
-    return Panel(lines, title="TradeSim", border_style="cyan", expand=False)
+    goal = f"\n[bold]{game.challenge}[/bold] — {game.challenge.intro}" if game.challenge else ""
+    lines = Text.from_markup(
+        f"[bold cyan]{LOGO}[/bold cyan]\n\n"
+        f"Learn to invest with [bold]{money(game.portfolio.starting_cash)}[/bold] of virtual cash.\n"
+        f"{market.num_days} trading days · {len(market.stocks)} companies in "
+        f"{len(market.sectors())} sectors · {len(market.etfs)} ETFs ({', '.join(market.etfs)})\n"
+        f"The market has hidden moods 🐂 🦀 🐻 💥 — trends you only see for sure afterwards.{goal}\n"
+        f"[yellow]Prices are SIMULATED. Not real data, not financial advice.[/yellow]\n"
+        f"[dim]Seed {market.seed} — run with --seed {market.seed} to replay this market.[/dim]")
+    return Panel(lines, title="📈 Welcome to TradeSim", border_style="cyan", box=box.ROUNDED,
+                 expand=False, padding=(0, 2))
 
 
-def market_table(game: Game) -> Table:
-    """Every symbol with price, today's change and a sparkline of recent days."""
+def quick_start() -> Text:
+    """The three commands a new player needs first."""
+    return Text.from_markup(
+        "New here? Try [cyan]market[/cyan] → [cyan]quote NVDA[/cyan] → [cyan]buy MIX6 max[/cyan] → "
+        "[cyan]next 5[/cyan]. Type [cyan]help[/cyan] for everything, [cyan]challenge[/cyan] for "
+        "missions, [cyan]learn[/cyan] for the glossary.")
+
+
+def status_bar(game: Game) -> Text:
+    """One line under every REPL screen: where you are and how you're doing."""
+    prices, account = game.current_prices(), game.portfolio
+    done = game.day / game.market.num_days
+    bar = "▰" * round(done * 10) + "▱" * (10 - round(done * 10))
+    line = Text.assemble((f"Day {game.day}/{game.market.num_days} {bar}", "bold"),
+                         f"  💵 {money(account.cash)}  📊 {money(account.equity(prices))} (",
+                         signed(account.total_return_pct(prices), "%"), ")  ", fear_text(game))
+    if game.challenge:
+        line.append(f"  {game.challenge.emoji} {game.challenge.title}", style="bold yellow")
+    return line
+
+
+def market_table(game: Game, symbols: list[str] | None = None) -> Table:
+    """Each symbol (default: all) with price, today's and 5-day change and a sparkline."""
     market, day = game.market, game.day
-    table = Table(title=day_line(game), title_justify="left")
-    for heading in ("Symbol", "Name", "Sector", "Price", "Today", "Last 10 days"):
-        table.add_column(heading, justify="right" if heading in ("Price", "Today") else "left")
-    start = max(0, day - config.SPARKLINE_DAYS + 1)
-    for symbol in market.symbols():
-        sector = "ETF" if market.is_etf(symbol) else market.stocks[symbol].sector
-        table.add_row(f"[cyan]{symbol}[/cyan]", market.name_of(symbol), sector,
-                      f"{market.price(symbol, day):,.2f}",
-                      signed(market.daily_change_pct(symbol, day), "%"),
-                      charts.sparkline(market.history(symbol, start, day)))
+    title = Text.assemble(day_title(game), "  ·  ", fear_text(game))
+    table = Table(title=title, title_justify="left", box=box.SIMPLE_HEAVY, caption=movers_line(game),
+                  caption_justify="left")
+    for heading in ("Symbol", "Name", "Sector", "Price", "Today", "5 days", "Last 10 days"):
+        table.add_column(heading, justify="right" if heading in ("Price", "Today", "5 days") else "left")
+    start = day - config.SPARKLINE_DAYS + 1
+    symbols = symbols or market.symbols()
+    last_stock = next((s for s in reversed(symbols) if s in market.stocks), None)  # line under the stocks
+    for symbol in symbols:
+        recent = market.history(symbol, max(start, market.first_day), day)
+        five_day = analytics.change(market.history(symbol, market.first_day, day), 5) * 100
+        table.add_row(f"[bold cyan]{symbol}[/bold cyan]", market.name_of(symbol),
+                      sector_text(sector_of(game, symbol)), f"{market.price(symbol, day):,.2f}",
+                      signed(market.daily_change_pct(symbol, day), "%"), signed(five_day, "%", 1),
+                      Text(charts.sparkline(recent), style="green" if recent[-1] >= recent[0] else "red"),
+                      end_section=symbol == last_stock)
     return table
 
 
-def quote_panel(game: Game, symbol: str) -> Panel:
-    """One symbol: price, day change, high/low so far and the player's holding."""
+def day_title(game: Game) -> Text:
+    """'Day 12 / 60' in bold, with a game-over note at the end."""
+    end = "  (final day — game over)" if game.is_over() else ""
+    return Text(f"Day {game.day} / {game.market.num_days}{end}", style="bold")
+
+
+def movers(game: Game, start: int, end: int) -> list[tuple[str, float]]:
+    """Every stock with its % change from `start` to `end`, best first."""
+    market = game.market
+    moves = [(s, (market.price(s, end) / market.price(s, start) - 1) * 100) for s in market.stocks]
+    return sorted(moves, key=lambda pair: pair[1], reverse=True)
+
+
+def movers_line(game: Game, start: int | None = None) -> Text:
+    """'▲ NVDA +4.2% AMZN +2.0%  ▼ XOM −2.1% …' for the given period (default: today)."""
+    start = max(0, game.day - 1) if start is None else start
+    if start == game.day:
+        return Text("Day 0: markets open tomorrow. Type next to start the clock.", style="dim")
+    ranked = movers(game, start, game.day)
+    best = [Text.assemble(f"{s} ", signed(m, "%", 1)) for s, m in ranked[:config.MOVERS_SHOWN]]
+    worst = [Text.assemble(f"{s} ", signed(m, "%", 1)) for s, m in ranked[-config.MOVERS_SHOWN:]]
+    return Text.assemble(("▲ Best  ", "green"), Text("  ").join(best),
+                         ("    ▼ Worst  ", "red"), Text("  ").join(worst))
+
+
+def quote_panel(game: Game, symbol: str, outlook: Text | None = None) -> Panel:
+    """Company profile: what it does, price, trend, risk, your holding and the robo's view."""
     market, day = game.market, game.day
     prices = market.history(symbol, 0, day)
+    recent = prices[-config.QUOTE_SPARK_DAYS:]
     body = Text.assemble(
-        f"Price      {money(prices[-1])}   Today ", signed(market.daily_change_pct(symbol, day), "%"),
-        f"\nHigh/low   {money(max(prices))} / {money(min(prices))} since day 0",
-        f"\nYou hold   {game.portfolio.qty_held(symbol)} shares")
-    return Panel(body, title=f"{symbol} — {market.name_of(symbol)}", expand=False)
+        (profile_line(game, symbol), "italic"), "\n\n",
+        f"Price    {money(prices[-1])}   Today ", signed(market.daily_change_pct(symbol, day), "%"),
+        "   5 days ", signed(analytics.change(prices, 5) * 100, "%", 1),
+        "   Since day 0 ", signed(analytics.change(prices, day) * 100, "%", 1),
+        f"\nRange    {money(min(prices))} – {money(max(prices))} since day 0",
+        "\nTrend    ", Text(charts.sparkline(recent), style="green" if recent[-1] >= recent[0] else "red"),
+        (f"  last {len(recent)} days", "dim"),
+        "\nRisk     ", risk_line(game, symbol),
+        "\nYou      ", holding_line(game, symbol))
+    if outlook is not None:
+        body.append_text(Text.assemble("\nRobo     ", outlook))
+    title = Text.assemble((f"{symbol} — {market.name_of(symbol)} · ", "bold"),
+                          sector_text(sector_of(game, symbol)))
+    return Panel(body, title=title, title_align="left", border_style="cyan", expand=False, width=88)
+
+
+def profile_line(game: Game, symbol: str) -> str:
+    """The company or fund description from data/universe.json."""
+    market = game.market
+    source = market.etfs[symbol] if market.is_etf(symbol) else market.stocks[symbol]
+    return source.description or market.name_of(symbol)
+
+
+def risk_line(game: Game, symbol: str) -> Text:
+    """Volatility so far plus beta, in words a beginner can use."""
+    market = game.market
+    swing = analytics.volatility(market.history(symbol, 0, game.day))
+    text = Text(f"typical daily swing {swing:.1%}" if game.day >= 2 else "too early to measure swings")
+    if not market.is_etf(symbol):
+        beta = market.stocks[symbol].beta
+        kind = "aggressive" if beta > config.BETA_AGGRESSIVE else "defensive" if beta < config.BETA_DEFENSIVE else "average"
+        text.append(f" · beta {beta:.2f}, {kind} (moves ~{beta:.1f}× the market)")
+    return text
+
+
+def holding_line(game: Game, symbol: str) -> Text:
+    """'20 shares · worth $2,648 · +$412 (+18.4%)' or 'no shares yet'."""
+    position = game.portfolio.positions.get(symbol)
+    if position is None:
+        return Text(f"no shares yet — max you can buy now: {game.max_buy(symbol)}", style="dim")
+    price = game.market.price(symbol, game.day)
+    pnl = position.unrealised_pnl(price)
+    return Text.assemble(f"{position.qty} shares · worth {money(position.market_value(price))} · ",
+                         signed(pnl), " (", signed(pnl / (position.avg_cost * position.qty) * 100, "%", 1), ")")
 
 
 def chart_panel(game: Game, symbols: list[str]) -> Panel:
-    """Price chart from day 0 to today; two symbols are scaled to 'value of $100'."""
+    """Price chart from day 0 to today; two symbols are scaled to 'value of $100'.
+
+    One symbol is drawn with its 20-day moving average, the simplest trend indicator.
+    """
     histories = {s: game.market.history(s, 0, game.day) for s in symbols}
     if len(symbols) > 1:
         histories = {s: analytics.value_of(100, h) for s, h in histories.items()}
         title = " vs ".join(f"{s} ({m})" for s, m in zip(symbols, charts.MARKERS))
         title += " — value of $100 invested on day 0"
     else:
-        title = f"{symbols[0]} price"
-    return Panel("\n".join(charts.line_chart(histories)), title=title, expand=False)
+        prices = histories[symbols[0]]
+        histories["average"] = analytics.moving_average(prices, config.MA_WINDOW)
+        title = f"{symbols[0]} price (*) and its {config.MA_WINDOW}-day average (o)"
+    return Panel("\n".join(charts.line_chart(histories)), title=title, expand=False,
+                 border_style="cyan")
+
+
+def recap_panel(game: Game, start: int) -> Panel:
+    """After `next`: how the market and your money moved since `start`, plus the movers."""
+    market, index = game.market, game.market.index_symbol()
+    before, now = game.equity_history[start], game.equity()
+    body = Text.assemble(
+        f"Market ({index})  ", signed((market.price(index, game.day) / market.price(index, start) - 1) * 100, "%"),
+        "    ", fear_text(game), "\n",
+        f"You            {money(now)}  ", signed(now - before), " (",
+        signed((now / before - 1) * 100, "%"), f") since day {start}\n", movers_line(game, start))
+    days = f"Day {start} → {game.day}" if game.day - start > 1 else f"Day {game.day}"
+    return Panel(body, title=f"☀  {days}", title_align="left", border_style="blue", expand=False)
 
 
 def etf_panel(game: Game, symbol: str) -> Panel:
@@ -106,8 +266,9 @@ def etf_panel(game: Game, symbol: str) -> Panel:
 def trade_message(trade: Trade, cash: float) -> str:
     """One-line confirmation after a buy or sell."""
     verb = "Bought" if trade.side == "BUY" else "Sold"
+    left = f"Cash: {money(cash)}" if cash >= 0 else f"Loan: {money(-cash)}"
     text = (f"[green]✓ {verb} {trade.qty} [cyan]{trade.symbol}[/cyan] @ {money(trade.price)} "
-            f"= {money(trade.value())} + {money(trade.fee)} fee.[/green]  Cash: {money(cash)}")
+            f"= {money(trade.value())} + {money(trade.fee)} fee.[/green]  {left}")
     if trade.side == "SELL":
         text += f"  Realised P&L: {trade.realised_pnl:+,.2f}"
     return text
@@ -198,19 +359,46 @@ def monte_carlo_view(result: MonteCarloResult) -> Panel:
 
 
 def report_panel(game: Game) -> Panel:
-    """End-of-game report (also `report` mid-game) (C-09)."""
+    """End-of-game report (also `report` mid-game) (C-09), with a grade against the market."""
     account, prices = game.portfolio, game.current_prices()
-    title = "Final report" if game.is_over() else "Report so far"
+    title = "🏁 Final report" if game.is_over() else "📋 Report so far"
+    index = game.market.index_symbol()
+    market_return = analytics.total_return(game.market.history(index, 0, game.day)) * 100
+    letter, verdict = grade(game)
     body = Text.assemble(
+        (f"Grade {letter}", "bold reverse"), f"  {verdict}\n\n",
         f"Starting cash   {money(account.starting_cash)}\n",
         f"Equity          {money(account.equity(prices))}  (",
         signed(account.total_return_pct(prices), "%"), ")\n",
+        f"Whole market    {index} ", signed(market_return, "%"), " over the same days\n",
         "Realised ", signed(account.realised_pnl), " · Unrealised ",
         signed(account.unrealised_pnl(prices)), " · Fees ", signed(-account.fees_paid), "\n",
         best_and_worst(game),
         f"Max drawdown    {analytics.max_drawdown(game.equity_history):.1%}   "
-        f"Trades {len(account.trades)}")
-    return Panel(body, title=f"{title} — Day {game.day}", expand=False)
+        f"Trades {len(account.trades)}   Badges {len(game.badges)}")
+    return Panel(body, title=f"{title} — Day {game.day}", title_align="left",
+                 border_style="green" if account.total_pnl(prices) >= 0 else "red", expand=False)
+
+
+def grade(game: Game) -> tuple[str, str]:
+    """A letter grade comparing the player with simply holding the whole market."""
+    account, prices = game.portfolio, game.current_prices()
+    if not account.trades:
+        return "–", "You haven't invested yet. Cash is safe, but it never grows."
+    mine = account.total_return_pct(prices) / 100
+    history = game.market.history(game.market.index_symbol(), 0, game.day)
+    calmer = analytics.max_drawdown(game.equity_history) <= analytics.max_drawdown(history)
+    if mine > analytics.total_return(history) + config.BEAT_MARGIN:
+        if mine <= 0:
+            return "B", "You lost money, but clearly less than the market. That's skill in a falling market."
+        if calmer:
+            return "A+", "You beat the whole market AND took less risk. Superb."
+        return "A", "You beat the whole market. Check the drawdown to see the risk you took."
+    if mine > 0:
+        return "B", "In profit, but simply holding the whole market would have done better."
+    if mine > config.GRADE_SMALL_LOSS:
+        return "C", "A small loss. Markets go down too; what matters is not panicking."
+    return "D", "A big loss. Type coach for tips and whatif to see other strategies."
 
 
 def best_and_worst(game: Game) -> Text:
@@ -230,8 +418,10 @@ def best_and_worst(game: Game) -> Text:
 def move_list(game: Game, event: MarketEvent) -> Text:
     """'NVDA -8.1%, AAPL -7.9% · MIX6 -2.6%' for the stocks an event hit and the ETF."""
     market, day = game.market, event.day
+    hit = sorted(explainer.affected_symbols(market, event),
+                 key=lambda s: abs(market.daily_change_pct(s, day)), reverse=True)
     parts = [Text.assemble(f"{s} ", signed(market.daily_change_pct(s, day), "%", 1))
-             for s in explainer.affected_symbols(market, event)]
+             for s in hit[:config.NEWS_MOVERS_SHOWN]]
     parts.append(Text.assemble(f"{config.LAB_DEFAULT_ETF} ",
                                signed(market.daily_change_pct(config.LAB_DEFAULT_ETF, day), "%", 1)))
     return Text(", ").join(parts[:-1]) + Text(" · ") + parts[-1]

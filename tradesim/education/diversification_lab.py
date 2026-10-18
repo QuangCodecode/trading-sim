@@ -5,6 +5,7 @@ from tradesim.engine import analytics
 from tradesim.engine.errors import TradeSimError, UnknownSymbolError
 from tradesim.engine.etf import ETF
 from tradesim.engine.market import Market
+from tradesim.engine.regime import RegimeModel
 from tradesim.engine.stock import Stock
 
 
@@ -125,11 +126,12 @@ class MonteCarloResult:
 def monte_carlo(stocks: dict[str, Stock], etfs: dict[str, ETF], stock_symbol: str,
                 etf_symbol: str, base_seed: int, runs: int = config.MONTE_CARLO_RUNS,
                 days: int = config.GAME_DAYS,
-                loss_threshold: float = config.MC_LOSS_THRESHOLD) -> MonteCarloResult:
+                loss_threshold: float = config.MC_LOSS_THRESHOLD,
+                regime_model: RegimeModel | None = None) -> MonteCarloResult:
     """Build `runs` fresh markets (seeds base_seed+1…) and record both total returns."""
     stock_returns, etf_returns = [], []
     for run in range(1, runs + 1):
-        market = Market(stocks, etfs, base_seed + run, days)
+        market = Market(stocks, etfs, base_seed + run, days, regime_model=regime_model)
         if run == 1:
             check_lab_symbols(market, stock_symbol, etf_symbol)
         stock_returns.append(analytics.total_return(market.history(stock_symbol, 0, days)))

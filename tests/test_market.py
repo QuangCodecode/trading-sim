@@ -90,14 +90,14 @@ def test_events_use_separate_rng_so_prices_match_until_first_event(universe):
     assert plain.prices_on(first) != with_news.prices_on(first)
 
 
-def test_events_are_deterministic_and_roughly_15_percent_of_days(universe):
+def test_events_are_deterministic_and_roughly_25_percent_of_days(universe):
     stocks, etfs = universe
     templates = load_events(config.EVENTS_PATH, stocks).templates
     a = Market(stocks, etfs, 7, 1000, templates)
     b = Market(stocks, etfs, 7, 1000, templates)
     days_a = [d for d in range(1, 1001) if a.events_on(d)]
     assert days_a == [d for d in range(1, 1001) if b.events_on(d)]
-    assert 100 < len(days_a) < 200
+    assert 200 < len(days_a) < 300
 
 
 def test_shock_moves_the_affected_stock(universe):
@@ -108,3 +108,90 @@ def test_shock_moves_the_affected_stock(universe):
     market = Market(stocks, etfs, 3, 200, boom)
     event_day = next(d for d in range(1, 201) if market.events_on(d))
     assert market.daily_change_pct("KO", event_day) > 15
+
+
+# --- Real-life trends: regimes, volatility memory, beta (finance model §3.2) ---
+
+from tradesim.engine.regime import NORMAL, Regime, RegimeModel, spells
+from tradesim.loader import load_regimes
+
+
+@pytest.fixture
+def regimes():
+    """The real market moods from data/regimes.json."""
+    return load_regimes(config.REGIMES_PATH)
+
+
+def test_regime_path_is_deterministic_and_covers_every_day(regimes):
+    a, b = regimes.generate(42, 60), regimes.generate(42, 60)
+    assert a == b and len(a) == 61
+    assert set(a) <= set(regimes.regimes)
+
+
+def test_regime_path_does_not_change_the_noise_stream(universe, regimes):
+    """Moods use their own RNG: switching them on must not reshuffle the random draws."""
+    stocks, etfs = universe
+    flat = Market(stocks, etfs, 5, 30)
+    moody = Market(stocks, etfs, 5, 30, regime_model=regimes)
+    assert flat.regime_path == ["normal"] * 31
+    assert moody.regime_path == regimes.generate(5, 30)
+
+
+def test_bull_markets_last_longer_than_crashes(regimes):
+    assert regimes.regimes["bull"].expected_days() > 30
+    assert regimes.regimes["crash"].expected_days() < 6
+
+
+def test_spells_group_runs_of_the_same_mood():
+    path = ["bull", "bull", "bear", "bear", "bear", "bull"]
+    assert spells(path) == [("bull", 0, 1), ("bear", 2, 4), ("bull", 5, 5)]
+
+
+def test_crash_regime_drags_the_market_down(universe):
+    """A market stuck in a crash must fall on average; one stuck in a bull must rise."""
+    stocks, etfs = universe
+    crash = Regime("crash", "Crash", "!", -0.01, 3.0, {"crash": 1.0})
+    bull = Regime("bull", "Bull", "^", 0.002, 0.8, {"bull": 1.0})
+    falls = [Market(stocks, etfs, seed, 60, regime_model=RegimeModel({"crash": crash}, {"crash": 1.0}))
+             for seed in range(5)]
+    rises = [Market(stocks, etfs, seed, 60, regime_model=RegimeModel({"bull": bull}, {"bull": 1.0}))
+             for seed in range(5)]
+    assert statistics.mean(analytics.total_return(m.history("MIX6", 0, 60)) for m in falls) < -0.2
+    assert statistics.mean(analytics.total_return(m.history("MIX6", 0, 60)) for m in rises) > 0.05
+
+
+def test_high_beta_stock_follows_the_market_more(universe, regimes):
+    """NVDA (beta 1.6) must swing more than JNJ (beta 0.5) over many markets."""
+    stocks, etfs = universe
+    nvda, jnj = [], []
+    for seed in range(10):
+        market = Market(stocks, etfs, seed, 120, regime_model=regimes)
+        nvda.append(analytics.volatility(market.history("NVDA", 0, 120)))
+        jnj.append(analytics.volatility(market.history("JNJ", 0, 120)))
+    assert statistics.mean(nvda) > 2 * statistics.mean(jnj)
+
+
+def test_fear_index_is_about_11_when_calm_and_jumps_in_a_crash(universe):
+    stocks, etfs = universe
+    calm = Market(stocks, etfs, 1, 10)
+    assert calm.fear_index(0) == pytest.approx(config.MARKET_VOL * 252 ** 0.5 * 100)
+    crash = Regime("crash", "Crash", "!", 0.0, 3.0, {"crash": 1.0})
+    stormy = Market(stocks, etfs, 1, 10, regime_model=RegimeModel({"crash": crash}, {"crash": 1.0}))
+    assert stormy.fear_index(5) > 2.5 * calm.fear_index(0)
+
+
+def test_normal_regime_is_the_default(universe):
+    stocks, etfs = universe
+    assert Market(stocks, etfs, 1, 5).regime_on(3) is NORMAL
+
+
+def test_the_same_headline_never_repeats_within_the_gap(universe):
+    stocks, etfs = universe
+    templates = load_events(config.EVENTS_PATH, stocks).templates
+    market = Market(stocks, etfs, 11, 400, templates)
+    seen = {}
+    for day in range(1, 401):
+        for event in market.events_on(day):
+            if event.headline in seen:
+                assert day - seen[event.headline] > config.EVENT_REPEAT_GAP
+            seen[event.headline] = day

@@ -41,9 +41,13 @@ def generate_events(templates: list[dict], seed: int, num_days: int) -> dict[int
     """Roll for news on each day 1..num_days using its own RNG (so prices' RNG is untouched)."""
     rng = random.Random(seed + config.EVENT_SEED_OFFSET)
     events = {}
+    last_used = {}  # template id → the day it last made the news
     for day in range(1, num_days + 1):
         if templates and rng.random() < config.EVENT_PROBABILITY:
-            template = rng.choice(templates)
+            # Real news doesn't repeat word for word within a few weeks, so skip recent ones.
+            fresh = [t for t in templates if day - last_used.get(t["id"], -999) > config.EVENT_REPEAT_GAP]
+            template = rng.choice(fresh or templates)
+            last_used[template["id"]] = day
             shock = rng.uniform(template["shock_min"], template["shock_max"])
             events[day] = [MarketEvent(day, template["headline"], template["explanation"],
                                        template["scope"], template["target"], shock)]

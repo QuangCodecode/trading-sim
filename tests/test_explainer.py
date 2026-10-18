@@ -15,8 +15,9 @@ CHIP_CURBS = MarketEvent(2, "Chip export curbs hit tech stocks", "", "sector", "
 @pytest.fixture
 def example_b(universe):
     stocks, etfs = universe
+    stocks = {s: stocks[s] for s in START}  # just MIX6's six holdings, as in the worked example
     prices = {s: [START[s], DAY_1[s], DAY_2[s]] for s in START}
-    market = Market.from_prices(stocks, etfs, prices)
+    market = Market.from_prices(stocks, {"MIX6": etfs["MIX6"]}, prices)
     market.add_event(CHIP_CURBS)
     return market
 
@@ -59,5 +60,6 @@ def test_scopes_affect_only_their_targets(universe):
     sector_event = MarketEvent(1, "", "", "sector", "Energy", 0.1)
     market_event = MarketEvent(1, "", "", "market", "ALL", 0.1)
     assert [s for s in stocks if stock_event.affects(stocks[s])] == ["NVDA"]
-    assert [s for s in stocks if sector_event.affects(stocks[s])] == ["XOM", "CVX"]
+    energy = [s for s in stocks if sector_event.affects(stocks[s])]
+    assert len(energy) == 10 and {"XOM", "CVX"} <= set(energy)
     assert all(market_event.affects(stock) for stock in stocks.values())

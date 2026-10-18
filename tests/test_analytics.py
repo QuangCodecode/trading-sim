@@ -39,3 +39,13 @@ def test_worst_day_reports_return_and_day():
 
 def test_value_of_scales_to_amount():
     assert analytics.value_of(5000, [50, 55, 45]) == pytest.approx([5000, 5500, 4500])
+
+
+def test_moving_average_uses_what_exists_at_the_start():
+    assert analytics.moving_average([2, 4, 6, 8], 2) == [2, 3, 5, 7]
+    assert analytics.moving_average([1, 2, 3], 5) == [1, 1.5, 2]
+
+
+def test_change_over_the_last_days():
+    assert analytics.change([100, 110, 121], 1) == pytest.approx(0.10)
+    assert analytics.change([100, 110, 121], 9) == pytest.approx(0.21)

@@ -6,7 +6,7 @@ import pytest
 
 from tradesim import config
 from tradesim.engine.errors import DataFileError
-from tradesim.loader import load_events, load_universe
+from tradesim.loader import load_events, load_regimes, load_universe
 
 GOOD = {
     "stocks": [
@@ -25,8 +25,12 @@ def write(tmp_path, data):
 
 def test_real_universe_loads(universe):
     stocks, etfs = universe
-    assert len(stocks) == 6
+    assert len(stocks) == 100
+    assert len({stock.sector for stock in stocks.values()}) == 10
+    assert set(etfs["MKT100"].weights) == set(stocks)
     assert sum(etfs["MIX6"].weights.values()) == pytest.approx(1.0)
+    assert set(etfs["MIX6"].weights) == {"AAPL", "NVDA", "XOM", "CVX", "KO", "WMT"}
+    assert all(stock.description and stock.beta > 0 for stock in stocks.values())
 
 
 def test_weights_summing_to_099_rejected(tmp_path):
@@ -93,3 +97,25 @@ def test_bad_event_templates_rejected(universe, tmp_path, changes, message):
     stocks, _etfs = universe
     with pytest.raises(DataFileError, match=message):
         load_events(event_file(tmp_path, **changes), stocks)
+
+
+def test_real_regimes_load_and_every_table_sums_to_one():
+    model = load_regimes(config.REGIMES_PATH)
+    assert set(model.regimes) == {"bull", "sideways", "bear", "crash"}
+    for regime in model.regimes.values():
+        assert sum(regime.transitions.values()) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("change, message", [
+    ({"start": {"bull": 0.5}}, "sum"),
+    ({"start": {"moon": 1.0}}, "unknown regime"),
+])
+def test_bad_regime_tables_rejected(tmp_path, change, message):
+    data = {"start": {"bull": 1.0},
+            "regimes": [{"name": "bull", "label": "Bull", "emoji": "b", "drift": 0.001,
+                         "vol_scale": 1.0, "next": {"bull": 1.0}}]}
+    data.update(change)
+    path = tmp_path / "regimes.json"
+    path.write_text(json.dumps(data))
+    with pytest.raises(DataFileError, match=message):
+        load_regimes(path)

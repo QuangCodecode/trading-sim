@@ -46,3 +46,15 @@ def max_drawdown(values: list[float]) -> float:
 def value_of(amount: float, values: list[float]) -> list[float]:
     """Return what `amount` invested at values[0] would be worth on each day."""
     return [amount * value / values[0] for value in values]
+
+
+def moving_average(values: list[float], window: int) -> list[float]:
+    """The average of the last `window` values at each point (fewer at the very start)."""
+    return [sum(values[max(0, i - window + 1):i + 1]) / (i - max(0, i - window + 1) + 1)
+            for i in range(len(values))]
+
+
+def change(values: list[float], days: int) -> float:
+    """Return over the last `days` values as a fraction (or since the start if shorter)."""
+    start = values[max(0, len(values) - 1 - days)]
+    return values[-1] / start - 1
