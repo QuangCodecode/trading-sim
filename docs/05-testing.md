@@ -124,6 +124,50 @@ def game(tiny_market, portfolio):
 - A corrupt cache file is treated as empty, and the next save rewrites it.
 - **Determinism guard:** take a snapshot of every `Market` price, run `headline_lab.score` over all events, and assert the prices are unchanged (D-20).
 
+### `test_agent.py` (X-06, `tmp_path`, never loads Laya)
+- The first call creates the file with the seed and days. Only successful `buy`/`sell`/`next` lines are recorded.
+- State carries over between calls, and a 5-command replay gives the same equity as one live session.
+- Bad JSON, wrong version, wrong types, `[]` and a tampered command → exit 1, "damaged", file unchanged.
+- A different `--seed` is refused. Output has no ANSI codes and starts with the status line.
+- `execute` raises while `run_command` doesn't. `main.parse_args` without command words → REPL.
+
+### `test_intraday.py` (D-39, D-40)
+- Variance clock 0 → 1, bridges start and end at 0; a session runs from yesterday's close to today's close for stocks and ETFs; ETF ticks follow the §3.3 formula.
+- Same seed → same session, days differ; bars are OHLC-consistent; news jumps at its tick and only for the stocks it hits.
+- Pre-history joins day 0 without a jump, day 0 has a session, negative days outside the history raise; no history → day 0 bar is flat.
+- Order book brackets the last price and is the same every time; `step` moves the clock, stops at the bell, reports news when it breaks; trades mid-session use the tick price; `next` finishes a running day.
+
+### `test_margin.py` (D-41, worked numbers from docs/03 §3.13)
+- Cash accounts can't borrow; 2× borrows $9,999; the −30% / −35% margin-call table; liquidation sells 106 and leaves −$3,012; wipe-out leaves a debt; interest only on loans; changing leverage; a game's margin call happens mid-session and `next` checks every tick.
+
+### `test_leverage.py` (E-08 and the new commands)
+- 1× run = buy and hold; 2× ≈ double the move plus interest; 5× is called on day 4 and ends in debt; the 2× daily fund shows volatility decay; lessons; risk table.
+- `leverage`, `tick`, `levlab` (works from day 0 thanks to the history), `market SECTOR`; Margin Madness punishes doing nothing; new badges.
+
+### `test_webapp.py` (D-37, never loads Laya)
+- Trading dates skip weekends; the state is JSON-ready; the board never shows prices past the current tick.
+- Notices: trade, badge, closing bell (with summary), news only once it breaks, margin call, leverage change, a new game forgets old news.
+- Charts (1D candles, daily + live candle, bad span), trade markers on the right candle, every page's builder.
+- A real `HTTPServer` on a free port: page + state, commands + ticks, five bad requests → 400 with a message, paths outside `static/` → 404.
+
+### Real-life trends (`test_market.py`, D-30)
+- Mood path deterministic, one mood per day, own RNG (doesn't reshuffle the noise).
+- Bull spells long, crashes short; a market stuck in a crash falls > 20%, one stuck in a bull rises.
+- High-beta NVDA swings > 2× low-beta JNJ; fear gauge ≈ 11 when calm, > 2.5× in a crash.
+- A headline never repeats within `EVENT_REPEAT_GAP` days.
+
+### `test_robo_analyst.py` (E-06, pure Python)
+- Sigmoid bounds; features on hand-made series (5/20-day trend, gap, fall from high).
+- Training learns an easy rule (accuracy > 95%) and the loss falls; `reasons` add up to the score.
+- Save/load round trip; scorecard vs lazy guess and catch rate.
+- The shipped model learnt "storms mean danger"; models never peek past `day` (future prices tripled → same answer).
+
+### `test_coach.py`, `test_whatif.py`, `test_progress.py`
+- One positive + one negative case per coach rule; sector exposure looks inside ETFs.
+- What-if: "Your trades" replay equals the real equity (fidelity); 11 strategies ranked; chase reinvests proceeds; strategies never peek.
+- Badges announced once; command badges; every challenge seed still tells its story (7 cases);
+  goals pass/fail; `challenge`/`new` restart in place; glossary partial/typo lookup; quiz marking; quiz answers vary.
+
 ## 5.4 Running
 
 ```bash
@@ -146,3 +190,7 @@ pytest -q --cov=tradesim --cov-report=term-missing   # coverage (target ≥ 85% 
 | 9 | `whatif` (Phase 4) | "Your trades" matches final equity |
 | 10 | Ctrl+C mid-game | graceful exit, no traceback |
 | 11 | Run twice with `--seed 42` and same commands | identical output |
+| 12 | `rm -f saves/agent.json; uv run main.py --seed 42 market; uv run main.py buy nvda 20; uv run main.py next 5; uv run main.py portfolio` | NVDA position on day 5, each exit code 0 |
+| 13 | `uv run main.py buy XYZ 1; echo $?` | one `✗` line, `1` |
+| 14 | `uv run main.py --web --seed 42`: Open the market, double-click NVDA → buy 10, Trade page (1D and All), Leverage 2× → buy MKT100 max, Skip 20 days, every page, Terminal `buy NOPE 1` | live board, toasts, closing bell; red toast/line for the bad command; no traceback in the server terminal |
+| 15 | Same, at 15× speed for a whole day, then **To close ⏭** and **Skip to the end** | the clock never stalls; final report dialog |

@@ -4,16 +4,17 @@ Style: a command prompt (`> `), not numbered menus. Every screen is built in
 `cli/views.py` with `rich` (Tables, Panels, colour). Mock-ups below are plain text; the
 real output adds colour: **green** gains, **red** losses, **cyan** symbols, **yellow** tips.
 
-From Phase 5 the same screens live inside a **Textual dashboard** (D-17, layout in §4.4).
-Every command below still works from its command box. `python3 main.py --plain` keeps
-the Phase 1 REPL.
+The same commands and screens are available in two more front ends:
+- the **web app** for ordinary players (`uv run main.py --web`, D-37, layout in §4.4). Its
+  buttons send these command lines, and its Terminal page accepts any of them.
+- **agent mode** for AI agents: one command per shell call, plain-text output (D-26, §4.7).
 
 ## 4.1 Command reference
 
 | Command | Aliases | Phase | What it does |
 |---|---|---|---|
 | `help [command]` | `?`, `h` | 1 | List commands / show usage + example for one command |
-| `market` | `m` | 1 | Price table: symbol, name, sector, price, today's change %, sparkline of last 10 days |
+| `market [SECTOR]` | `m` | 1, 9 | Price table: symbol, name, sector, price, today's change %, sparkline of last 10 days. `market tech` / `market real` (any sector prefix) or `market etf` show one group of the 114 symbols |
 | `quote SYMBOL` | `q SYMBOL` | 1 | One symbol: price, day change, high/low so far, your holding |
 | `chart SYMBOL [SYMBOL2]` | `c` | 1 | ASCII line chart from day 0 to today (two symbols → same chart, normalised to $100) |
 | `etf [SYMBOL]` | | 1 | ETF composition (weights, sectors, each holding's current share) + a one-paragraph "what is an ETF" |
@@ -21,17 +22,29 @@ the Phase 1 REPL.
 | `sell SYMBOL QTY` / `sell SYMBOL all` | `s` | 1 | Sell shares |
 | `portfolio` | `pf`, `p` | 1 | Holdings table + cash, equity, P&L summary |
 | `history` | `hist` | 1 | Trade log |
-| `next [N]` | `n` | 1 | Advance 1 or N days (N ≥ 1, capped at days remaining); shows market summary + news |
+| `next [N]` | `n` | 1 | Advance 1 or N days (N ≥ 1, capped at days remaining); shows market summary + news. A running session counts as the first day |
+| `tick [N]` | `t`, `wait` | 9 | Let today's session run N five-minute ticks (default 1); stops at the closing bell (tick 78). Prints the time, breaking news and any margin call (D-39) |
+| `leverage [N]` | `lev`, `margin` | 9 | Your margin account (allowed/used leverage, loan, interest, buying power, distance to a margin call) and the risk table; `leverage 2` sets the limit (1–5; lowering it needs you to already fit) (D-41) |
+| `levlab [SYMBOL]` | `ll` | 9 | Leverage Lab: the last 60 days (history included) of SYMBOL (default MKT100) at 1×, 2×, 3×, 5× on margin and a 2× daily fund — table, chart, lessons (E-08) |
 | `lab [SYMBOL] [ETF]` | | 1 | Diversification Lab (default: NVDA vs MIX6) |
 | `lab mc [SYMBOL]` | | 1 (stretch) | Monte Carlo lab over `MONTE_CARLO_RUNS` fresh markets |
 | `report` | | 1 | End-of-game style report at any time |
 | `news [DAY]` | | 2 | Today's (or a past day's) events + ETF move breakdown |
-| `coach` | | 3 | Session review tips |
-| `whatif` | `replay` | 4 | Strategy comparison table + chart |
+| `coach` | | 3 | Session review tips (tips also appear after each trade, max 2) |
+| `whatif` | `replay`, `wi` | 4 | 11 strategies replayed on the same market: ranked table, chart, lessons |
+| `sectors` | `sector` | 8 | Each sector's move today, over 5 days and since day 0 |
+| `robo [SYMBOL]` | `bot` | 8 | Robo-analyst (E-06): downturn chance + reasons, every symbol's 5-day outlook, track records |
+| `story` | `moods` | 8 | The market's hidden moods so far, revealed 10 days late (all at the end) |
+| `badges` | `achievements` | 8 | 20 badges, won and locked (X-05) |
+| `challenge [NAME]` | `ch` | 8 | List the 9 challenges, or start one (restarts the game in place) |
+| `learn [TERM]` | `glossary` | 8 | Glossary list, or one term explained (typos and partial words OK) |
+| `quiz [A-D]` | | 8 | Show the next question / answer it; 5 right = Scholar badge |
+| `new [SEED]` | | 8 | Start a new free-play game |
 | `headlines` | `hl` | 5 | Headline Lab: every headline so far, keyword vs Laya (AI) verdict vs real move, plus the hit score |
 | `hl "TEXT"` | | 5 | Classify your own headline with both methods (no truth column — it never happened) |
 | `scenario list` / `scenario start NAME` | | X-01 | Challenge mode |
 | `save [NAME]` / `load NAME` | | X-02 | Save/restore game |
+| `uv run main.py [--game FILE] COMMAND…` | | X-06 | Agent mode: run one command on the saved game and exit (§4.7) |
 | `short SYMBOL QTY` | | X-03 | Open/increase a short (cover with `buy`) |
 | `quit` | `exit` | 1 | Confirm, show final report, exit |
 
@@ -196,8 +209,9 @@ Must finish in < 3 s. Shows diversification is about **odds**, not one lucky pat
   quantity is right; for an old day in `news DAY` it might not be).
 - Market-wide events say "Market-wide news can't be diversified away" instead of the
   share sentence (every holding was hit). `news 0` / a future day → friendly error.
-- `data/events.json` ships 16 templates (5 stock, 8 sector, 3 market; 8 good, 8 bad), including the
-  three tricky headlines plus "Exxon hit with record fine over oil spill".
+- `data/events.json` ships 46 templates (23 good, 23 bad; D-36), including tricky headlines
+  such as "Walmart sales not as bad as feared", "Electric car boom dents oil demand" and
+  "Bank stress fears fade as deposits return". A headline can't repeat within 40 days.
 
 ### E-03 Trade Coach (Phase 3)
 
@@ -207,11 +221,12 @@ trade just made) and returns a `Tip` or `None`. Easy to add/remove; easy to unit
 | ID | When checked | Trigger | Tip (example) |
 |---|---|---|---|
 | CONC | after buy | a single **stock** > `CONCENTRATION_LIMIT` (50%) of equity (ETFs exempt — they're already diversified) | "NVDA is now 62% of your money. One bad headline could hurt a lot — MIX6 spreads risk across 6 companies." |
-| PANIC | after sell | sold at a loss **and** that symbol fell ≥ `PANIC_DROP` (8%) over the last `PANIC_WINDOW_DAYS` (2) days | "You sold NVDA right after a sharp drop. Selling in panic locks in losses; ask 'has anything really changed?'" |
+| PANIC | after sell | sold at a loss **and** the price is ≥ `PANIC_DROP` (8%) below its high of the last `PANIC_WINDOW_DAYS` (3) days | "You sold NVDA right after a sharp drop. Selling in panic locks in losses; ask 'has anything really changed?'" |
+| CHASE | after buy | the symbol rose ≥ `CHASE_RISE` (12%) over the last 5 days | "NVDA is up 15% in 5 days. Buying after a big jump is 'chasing' — hot streaks often cool off." |
 | OVER | after any trade | ≥ `OVERTRADE_PER_DAY` (5) trades on the same day | "5 trades today = $5 in fees. Frequent trading rarely beats patience." |
 | IDLE | session review | day ≥ `IDLE_CASH_GRACE_DAYS` (10) and cash > `IDLE_CASH_LIMIT` (80%) of equity | "80% of your money is sitting in cash. Cash is safe but doesn't grow." |
 | FEES | session review | fees ≥ $10 and fees > `FEE_SHARE_LIMIT` (25%) of |total P&L| | "Fees ate 40% of your profit." |
-| GOOD | session review | holds MIX6 or ≥ 3 sectors, and no stock > 30% | "Nicely diversified — no single company can sink you." (positive feedback matters) |
+| GOOD | session review | owns ≥ 3 sectors (looking inside ETFs) and no single stock > 30% | "Nicely diversified — no single company can sink you." (positive feedback matters) |
 
 Show at most 2 tips after a trade (so it's not naggy); `coach` shows all session tips.
 
@@ -267,8 +282,8 @@ Show at most 2 tips after a trade (so it's not naggy); `coach` shows all session
  ▸ Words like 'bad' or 'record' can point the wrong way. Reading the whole sentence matters.
  ▸ Sentiment isn't price: even a correct call doesn't say how much. On day 47 NVDA moved +14.4%, but MIX6 only +5.2%.
 ```
-Over all 16 templates: keywords 12/16, Laya 15/16 (its one miss, "Central bank surprises
-with rate cut", is shown as `negative 53% (unsure)`).
+Over all 46 templates (D-36): keywords 37/46, Laya 44/46 (its misses: "Central bank surprises
+with rate cut", shown as `negative 53% (unsure)`, and "JPMorgan sets aside billions for bad loans").
 
 **Caching and demo safety (D-20, D-21, D-23)**
 - `classify` checks `data/sentiment_cache.json` first; a hit is used and the model is never loaded.
@@ -279,29 +294,51 @@ with rate cut", is shown as `negative 53% (unsure)`).
 - Headlines the player types with `hl "TEXT"` are cached too (so `git status` will show the
   cache file changed after playing; revert it before committing if you don't want them).
 
-## 4.4 Textual dashboard layout (Phase 5, D-17)
+## 4.4 Web app layout (D-37)
+
+Run with `uv run main.py --web` (opens `http://127.0.0.1:8000`; `--seed 39`, `--port`, `--no-browser`).
+Modelled on a Vietnamese broker's price board: dark, dense, colour-coded, live.
 
 ```
-┌ TradeSim · Day 12/60 · Equity $10,284.00 (+2.84%) · Seed 42 ─────────────────┐
-│ [Market] [Portfolio] [Lab] [News] [Headlines] [What-if]          ← tabs (F1–F6)│
-│ ┌ market table (views.market_table) ─┐ ┌ chart (charts.line_chart) ────────┐ │
-│ │ AAPL 186.40 +1.21% ▃▄▄▅▆▅▆▇▇█      │ │ NVDA (*) vs MIX6 (o)               │ │
-│ │ NVDA 110.05 −8.34% ▅▆▇█▇▆▆▅▄▁      │ │ … click a row to chart it          │ │
-│ └────────────────────────────────────┘ └────────────────────────────────────┘ │
-│ NEWS d12: Chip export curbs hit tech stocks — Laya: negative 91%              │
-│ > buy nvda 20_                                   [Next day ▶] [Next 5 ▶▶]      │
-└───────────────────────────────────────────────────────────────────────────────┘
+┌ TradeSim │ [MKT100 101.40 ▲+1.40% ~spark~] [TECHX …] [FINX …] … │ 11:35 ●LIVE  Day 3/60 · Wed 07 Jan │ [⏸ 1× 2× 5× 15×] [To close ⏭] [Skip days ▾] │ Your money $10,234 │
+├──────┬────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│Board │ 🔍 search   All ★Watchlist My holdings ETFs Communication Consumer Energy …                     ▲ above ref ■ unchanged ▼ below │
+│Trade │ Symbol│ Ref │ Bid3 Vol Bid2 Vol Bid1 Vol │ Price ± % Vol │ Ask1 Vol Ask2 Vol Ask3 Vol │ Total vol │ High Low Open │ You: Qty P&L│
+│Port. │ ★AAPL │180.00│ 180.65 38K …            │ 180.92 +0.92 ▲0.51% 32K │ 181.01 45K …   │ 200K │ 180.97 180.72 180.97 │  40  −0.4% │
+│News  │  … 114 rows, prices flash green/red as they tick; double-click a row (or B / S) for the order ticket …                    │
+│Lever.│                                                                                                                            │
+│Labs …│                                                                                                     toasts stack bottom-right │
+├──────┴────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 😱 Fear gauge 13 (calm) · 🏦 Borrowing $19,910 · margin call if holdings fall 20.1%      📰 latest headlines scroll…     seed 39 │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Reused unchanged:** `parser.parse`, `views.*` and `charts.*`. Textual's `Static` widget displays the rich
-  Tables and Panels that `views.py` already returns.
-- **New in `tui.py`:**
-  - One `App` subclass with `compose()`.
-  - An `Input` whose submit handler runs the same parse → handler → view steps as `app.py`.
-  - Two buttons that call `game.advance`.
-  - `TradeSimError` shows as a red message line, as in the REPL.
-- **Kept simple**: plain `on_button_pressed` / `on_input_submitted` methods, with no
-  `@on` decorators, no async code and no custom CSS beyond a few lines.
+| Page | What's on it |
+|---|---|
+| Board | The price board above. Tabs per sector, watchlist (★, saved in the browser), my holdings, ETFs; search (`/`); sort by price, %, volume; ↑/↓ select, Enter/B buy, S sell |
+| Trade `#trade/NVDA` | Symbol picker · big last price vs ref · OHLC + volume · **candlestick chart**: 1D (15-minute candles, live), 1M/3M/6M/All (daily candles back to day −120), candles/line, MA 20/MA 50, volume pane, your buys ▲ / sells ▼, crosshair tooltip · order ticket (Buy/Sell, quantity, 25/50/75/Max, cost, fee, borrowed amount) · 3-level order book · about (beta, yearly volatility, 6-month high/low) · Robo outlook · position · news |
+| Portfolio | Equity, today, cash or loan, invested, leverage used/allowed, safety cushion · you vs MKT100 chart · sector exposure (inside ETFs) · holdings (Trade / Sell all) · trade history (margin-call sales flagged) · coach |
+| News | Every headline seen (newest first) with Laya vs keywords vs what really happened (after the close), the moves it caused; Headline Lab "test your own" |
+| Leverage | 4 concept cards · margin account: 1×–5× picker, buying power, loan, nightly interest, safety-cushion bar with the maintenance line · "what a move does" calculator (two sliders, yours/borrowed bars, margin-call and wipe-out warnings) · Leverage Lab chart + table + lessons · risk table |
+| Labs | Diversification Lab (any stock vs any ETF, last 60 days) · What-if Replay (ranked table + 4 curves + lessons) · Monte Carlo (200 markets) |
+| Robo | Mood detector (downturn chance, reasons) · 5-day forecaster: most bullish / bearish symbols, honest scores |
+| Learn | Quiz (A–D buttons, feedback) · 20 badges · searchable glossary (33 terms) |
+| Goals | 9 challenge cards (confirm before restarting) · current goals · free play with a seed |
+| Terminal | Any command, drawn exactly like the terminal (rich → HTML) |
+
+- **The clock** lives in the page: every `1/speed` seconds it POSTs `/api/tick` (1 tick per request,
+  up to 3 at 15×) and waits for the reply before the next one, so ticks never overlap. Pause with ⏸ or
+  space. "To close ⏭" runs the rest of the day (`tick N`); "Skip days" runs `next N`.
+- **Closing bell**: a dialog with you vs the market and the day's best/worst stocks; "Keep the market
+  running" turns it into a toast instead. The game-over dialog shows the final report (rich → HTML).
+- **Notices → toasts**: `WebSession.run` compares the game before/after each command and queues
+  notices (trade, coach tip, breaking news, margin call, closing bell, badge, leverage change). The
+  page asks for notices newer than the last id it showed; after a reload old ones are skipped.
+- **Errors**: rule breaks (`TradeSimError`) → HTTP 400 with the friendly message → a red toast (or a
+  red line in the Terminal). Bad JSON, out-of-range ticks, unknown paths → 400/404; a bug → 500 and
+  the traceback in the server's terminal; the server never stops.
+- **Safety**: listens on 127.0.0.1 only; static files only from `webapp/static/` (no `..`); request
+  bodies ≤ 10 KB; command lines ≤ 300 characters.
 
 ## 4.5 Extension specs (only if time allows)
 
@@ -339,3 +376,37 @@ negative qty.
 - `hl` with no downloaded model, `laya` not installed, an odd model answer, or a corrupt `sentiment_cache.json`.
   Each falls back to the keyword counter (a corrupt cache is treated as empty).
 - `hl ""`, `hl` with 201+ characters, `hl` before any news.
+- Agent mode: no game file yet; damaged/edited game file; `--seed` different from the saved game;
+  a failing command (exit 1, file unchanged); `quit` (just says "still playing" — use `report`).
+- Web app: bad command in the Command tab; Buy/Sell/Next after game over (buttons disabled);
+  `lab` before day 5 (red message in the Lab tab).
+
+## 4.7 Agent mode (X-06, D-26)
+
+Lets a script play from a shell, one command per call:
+
+```bash
+uv run main.py --seed 42 market     # no game file yet → new seed-42 game in saves/agent.json
+uv run main.py buy NVDA 20          # continues that game
+uv run main.py next 5
+uv run main.py hl "Walmart sales not as bad as feared"
+uv run main.py report
+rm saves/agent.json                 # start over (or use --game other.json for a second game)
+```
+
+- **Output:** first a status line (`Day 5 / 60 · Cash $7,599.00 · Equity $9,943.80 · Seed 42`),
+  then the same screens as the REPL with no colour codes, `AGENT_WIDTH` (100) characters wide.
+- **Exit code:** `0` ok; `1` for any `TradeSimError`, printed as one `✗ …` line. Agents can use it to
+  notice a rejected trade.
+- **Game file** (`--game`, default `saves/agent.json`):
+  `{"version": 1, "seed": 42, "days": 60, "commands": ["buy NVDA 20", "next 5"]}`
+  - Only successful `buy`/`sell`/`next` lines are stored.
+  - Loading rebuilds the market from the seed and replays them through `app.execute`, giving the
+    identical game (D-08). Prices and cash are never stored, so they can't be edited.
+  - `--seed`/`--days` only apply when the file is created. A different `--seed` later is refused.
+  - The file is written only after a `buy`/`sell`/`next` or when `--seed` is given, so `help` or
+    `market` before choosing a seed doesn't lock in a random one.
+  - Bad JSON, wrong version/keys, or a stored command that now fails → `Game file … is damaged`, exit 1.
+- **Prompt to give an agent** (also in the README): *"Play TradeSim. Run `uv run main.py help`
+  to see the commands, then `uv run main.py --seed 42 market` to start. Run one command per call
+  and try to beat MIX6 by day 60."*

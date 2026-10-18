@@ -7,83 +7,111 @@ Notation: `P[s][t]` = price of symbol `s` on day `t`. Day 0 = starting prices.
 
 ## 3.1 Stock universe (`data/universe.json`)
 
-Tickers are real (for familiarity); **all prices and parameters are invented**.
+Tickers are real (for familiarity); **all prices and parameters are invented** (D-04).
+Since D-38 there are **100 stocks in 10 sectors** (the table shows the original 12). `drift` is the stock's own extra daily
+return ("alpha"); most of the trend now comes from the market's mood (§3.2).
 
-| Symbol | Name | Sector | Start price | Drift μ (daily) | Volatility σ (daily) | Personality |
-|---|---|---|---|---|---|---|
-| AAPL | Apple | Tech | 180.00 | 0.0006 | 0.018 | steady grower |
-| NVDA | NVIDIA | Tech | 120.00 | 0.0010 | 0.032 | high-flyer, wild swings |
-| XOM | Exxon Mobil | Energy | 110.00 | 0.0003 | 0.016 | cyclical |
-| CVX | Chevron | Energy | 150.00 | 0.0003 | 0.017 | cyclical |
-| KO | Coca-Cola | Consumer | 60.00 | 0.0002 | 0.010 | boring, defensive |
-| WMT | Walmart | Consumer | 70.00 | 0.0003 | 0.012 | defensive |
+| Symbol | Name | Sector | Start | Drift μ | Own vol σ | Beta β | Personality |
+|---|---|---|---|---|---|---|---|
+| AAPL | Apple | Tech | 180 | 0.0003 | 0.012 | 1.10 | steady giant |
+| NVDA | NVIDIA | Tech | 120 | 0.0006 | 0.024 | 1.60 | high-flyer, wild swings |
+| MSFT | Microsoft | Tech | 410 | 0.0003 | 0.011 | 1.05 | calm giant |
+| XOM | Exxon Mobil | Energy | 110 | 0.0002 | 0.012 | 0.80 | oil price |
+| CVX | Chevron | Energy | 150 | 0.0002 | 0.013 | 0.85 | oil price |
+| KO | Coca-Cola | Consumer | 60 | 0.0001 | 0.007 | 0.55 | defensive |
+| WMT | Walmart | Consumer | 70 | 0.0002 | 0.009 | 0.60 | defensive |
+| AMZN | Amazon | Consumer | 175 | 0.0003 | 0.016 | 1.25 | consumer with tech energy |
+| JPM | JPMorgan Chase | Finance | 195 | 0.0002 | 0.011 | 1.15 | economy-sensitive |
+| V | Visa | Finance | 270 | 0.0003 | 0.010 | 1.00 | payments |
+| JNJ | Johnson & Johnson | Healthcare | 155 | 0.0001 | 0.008 | 0.50 | defensive |
+| PFE | Pfizer | Healthcare | 28 | 0.0000 | 0.014 | 0.65 | drug-trial news |
 
-ETFs (fictional tickers — rename if one collides with a real fund):
+Each stock also has a one-paragraph `description` shown on its profile.
 
-| Symbol | Name | Holdings & weights | Phase |
+| ETF | Name | Holdings & weights |
+|---|---|---|
+| **MIX6** | Mix-6 ETF (core, C-04) | AAPL 0.20 · NVDA 0.15 · XOM 0.15 · CVX 0.15 · KO 0.15 · WMT 0.20 |
+| MKT100 | Total Market ETF (was MKT12) | all 100, cap-weighted by rough company size (AAPL, MSFT, NVDA ≈ 9% each … ALB 0.03%) |
+| TECH3 | Tech Leaders ETF | AAPL 0.34 · NVDA 0.33 · MSFT 0.33 (a fund, but one sector) |
+| DEF4 | Defensive ETF | KO 0.25 · WMT 0.25 · JNJ 0.30 · PFE 0.20 |
+| TECHX, COMMX, CONSX, ENRGX, FINX, HLTHX, INDUX, MATX, UTILX, REITX | Sector ETFs (D-38) | the ten stocks of one sector, cap-weighted |
+
+MKT100 is "the market": the benchmark in reports, badges, what-if and the Robo-analyst.
+
+**Since D-38 the universe has 100 stocks, 10 per sector** (the 12 above keep their numbers):
+
+| Sector | Stocks | β range | Own vol σ range |
 |---|---|---|---|
-| **MIX6** | Mix-6 ETF | AAPL 0.20 · NVDA 0.15 · XOM 0.15 · CVX 0.15 · KO 0.15 · WMT 0.20 (sum = 1.00; tech 35%, energy 30%, consumer 35%) | 1 (core) |
-| TECH2 | Tech-2 ETF | AAPL 0.50 · NVDA 0.50 | X-04 |
+| Tech | AAPL MSFT NVDA AVGO ORCL CRM AMD ADBE INTC CSCO | 0.9–1.7 | 0.010–0.025 |
+| Communication | GOOGL META NFLX DIS TMUS VZ T CMCSA EA TTWO | 0.45–1.3 | 0.009–0.019 |
+| Consumer | AMZN TSLA HD MCD NKE KO PEP PG WMT COST | 0.5–1.9 | 0.007–0.032 |
+| Energy | XOM CVX COP EOG SLB HAL OXY PSX MPC KMI | 0.75–1.2 | 0.010–0.020 |
+| Finance | JPM BAC WFC C GS MS BLK AXP V MA | 1.0–1.35 | 0.010–0.017 |
+| Healthcare | LLY UNH JNJ MRK ABBV TMO ABT AMGN PFE MRNA | 0.5–1.3 | 0.008–0.035 |
+| Industrials | GE CAT BA HON UPS LMT RTX DE UNP FDX | 0.45–1.3 | 0.010–0.020 |
+| Materials | LIN SHW APD ECL FCX NEM NUE DOW DD ALB | 0.4–1.5 | 0.009–0.028 |
+| Utilities | NEE SO DUK D AEP EXC SRE XEL PCG ED | 0.35–0.7 | 0.007–0.014 |
+| Real Estate | PLD AMT EQIX WELL SPG O PSA CCI DLR AVB | 0.6–1.15 | 0.009–0.015 |
 
-JSON shape:
-
-```json
-{
-  "stocks": [
-    {"symbol": "AAPL", "name": "Apple", "sector": "Tech",
-     "start_price": 180.0, "drift": 0.0006, "volatility": 0.018}
-  ],
-  "etfs": [
-    {"symbol": "MIX6", "name": "Mix-6 ETF", "base_value": 100.0,
-     "weights": {"AAPL": 0.20, "NVDA": 0.15, "XOM": 0.15,
-                 "CVX": 0.15, "KO": 0.15, "WMT": 0.20}}
-  ]
-}
-```
+Calibration with 100 stocks (150 markets × 252 days): MKT100 ≈ +13% mean (+9% median) a year,
+≈ 17% yearly volatility — the same ballpark as before and as a real total-market index.
 
 `loader.py` validation (raise `DataFileError` with a clear message):
 symbols unique and upper-case · start_price > 0 · volatility ≥ 0 · every ETF weight key is a
-known symbol · all weights > 0 · weights sum to 1 within 1e-9.
+known symbol · all weights > 0 · weights sum to 1 within 1e-9 · every regime table sums to 1.
 
-## 3.2 Daily price model
+## 3.2 Daily price model — real-life trends (D-30)
 
-Each stock's daily return is the sum of a **market** factor (everything moves together a
-bit), a **sector** factor (same-sector stocks move together), the stock's own **noise**,
-and any **event shock** (Phase 2):
+Real markets have **moods that last weeks** (bull runs, sideways chop, bear markets, the odd
+crash), **calm and stormy spells** (big moves cluster), and stocks that follow the market
+**more or less strongly**. The model has one ingredient for each:
 
 ```
-r[s][t] = μ_s + M_t + S[sector(s)][t] + σ_s · ε[s][t] + shock[s][t]
+mood_t        Markov chain over {bull, sideways, bear, crash}: tomorrow's mood is drawn from
+              today's row of the transition table in data/regimes.json (own RNG, D-09 style)
 
-M_t            ~ Normal(0, MARKET_VOL)       one draw per day
-S[k][t]        ~ Normal(0, SECTOR_VOL)       one draw per sector per day
-ε[s][t]        ~ Normal(0, 1)                one draw per stock per day
-shock[s][t]    = sum of shocks of events that affect s on day t   (0 in Phase 1)
+nervous_t   = (1 − α − β) + α · z_{t−1}² + β · nervous_{t−1}        GARCH(1,1), average 1
+storm_t     = vol_scale(mood_t) · √nervous_t                          1 = normal, 2.6 = crash
 
-r  = clamp(r, -MAX_DAILY_MOVE, +MAX_DAILY_MOVE)
-P[s][t] = round(max(MIN_PRICE, P[s][t-1] · (1 + r)), 2)
+M_t         = drift(mood_t) + MARKET_VOL · storm_t · z_t              z_t ~ N(0,1), the market factor
+S[k][t]     ~ N(0, SECTOR_VOL · storm_t)                              one per sector
+story_s     ~ N(0, STORY_SPREAD)                                      once per game: a good or bad year
+r[s][t]     = μ_s + story_s + β_s · M_t + S[sector][t] + σ_s · storm_t · ε + shock[s][t]
+
+r = clamp(r, −MAX_DAILY_MOVE, +MAX_DAILY_MOVE);  P[s][t] = round(max(MIN_PRICE, P[s][t−1]·(1+r)), 2)
 ```
 
-Why factors? With purely independent stocks diversification still works, but the market
-and sector factors make it **realistic**: diversification reduces risk but can't remove
-the market-wide part. That's a real lesson the Lab can state.
+| Mood | Daily drift | Storminess | Stays each day | Average spell |
+|---|---|---|---|---|
+| 🐂 Bull | +0.16% | 0.8× | 98% | 50 days |
+| 🦀 Sideways | +0.02% | 0.9× | 96% | 25 days |
+| 🐻 Bear | −0.30% | 1.35× | 95% | 20 days |
+| 💥 Crash | −2.0% | 2.6× | 72% | 3.6 days (then bear or a rebound) |
 
-**Expected ballpark** (checked with a prototype of exactly this model, 200 seeds × 60 days,
-no events). If your implementation is far off these, look for a bug:
+`α = STORM_KICK = 0.10`, `β = STORM_MEMORY = 0.85`, `MARKET_VOL = 0.0072`, `SECTOR_VOL = 0.0055`,
+`STORY_SPREAD = 0.0006`. The **fear gauge** is `storm_t × MARKET_VOL × √252 × 100`, a VIX-style
+"expected yearly swing": about 10 when calm, 30+ in a crash.
 
-| | AAPL | NVDA | XOM | CVX | KO | WMT | MIX6 |
-|---|---|---|---|---|---|---|---|
-| Avg daily volatility | 2.2% | 3.4% | 2.1% | 2.1% | 1.6% | 1.7% | **1.2%** |
+**Calibration** (300 markets × 252 days, with news; re-run `tools`-style checks after any change):
 
-NVDA average max drawdown ≈ 24% vs MIX6 ≈ 9%; NVDA finishes 60 days down > 20% in ≈ 19%
-of runs, MIX6 in < 1%. That gap *is* the lesson of the Diversification Lab.
+| | MKT100 | MIX6 | DEF4 | TECH3 | NVDA | KO |
+|---|---|---|---|---|---|---|
+| Yearly return (mean / median) | +11.5% / +9.1% | +10.4% / +8.5% | +3.3% / +1.4% | +16.8% / +12.1% | +27.9% / +16.0% | +2.3% / −0.5% |
+| Daily volatility | 1.12% | 1.13% | 0.94% | 1.72% | 2.91% | 1.17% |
+| Lost > 20% in a 60-day game | 5.3% | 4.3% | 2.3% | 7.7% | 15.7% | 2.7% |
+
+Moods are visible in prices: 86% of bull spells rise, 82% of bear spells fall, every crash
+falls (median −12%). Moods are spent ≈ 54% bull, 28% sideways, 17% bear, 1% crash, with ≈ 2
+switches per 60-day game. NVDA losing > 20% in about 1 game in 6 vs MIX6 in 1 in 23 is the
+Diversification Lab's lesson.
 
 **Determinism rules (critical):**
-- `Market` owns `self._rng = random.Random(seed)` for prices.
-- Draw order per day is fixed: `M_t`, then sectors in **sorted** name order, then stocks in
-  **sorted** symbol order. Never iterate a set.
-- Events use a **separate** `random.Random(seed + EVENT_SEED_OFFSET)` so switching events
-  on/off (Phase 1 → 2) doesn't change the underlying random walk.
+- `Market` owns `self._rng = random.Random(seed)` for prices; moods use
+  `Random(seed + REGIME_SEED_OFFSET)`, events `Random(seed + EVENT_SEED_OFFSET)`.
+- Draw order: company stories (sorted symbols) once, then per day: `z_t`, sectors in **sorted**
+  order, stocks in **sorted** symbol order. Never iterate a set.
 - Prices are rounded to cents when generated, so the displayed price is exactly the traded price.
+- A market built without `regime_model` uses one calm "normal" mood (tests, hand-made markets).
 
 ## 3.3 ETF pricing — weighted average (instructor requirement C-04)
 
@@ -217,8 +245,9 @@ cash < FEE, as long as `q·p ≥ FEE`; otherwise reject.
 - Each day (t ≥ 1), with probability `EVENT_PROBABILITY`, pick one template uniformly
   (event RNG), draw `shock` uniformly in `[shock_min, shock_max]`, attach a `MarketEvent`
   to that day, and add `shock` to the return of every affected stock (§3.2).
-- Provide ~12 templates: 4 stock-level (e.g. "NVDA smashes earnings" +6..+12%), 5
-  sector-level (positive and negative for each sector), 3 market-wide (smaller: ±2..4%).
+- 46 templates (D-36): 23 good, 23 bad, balanced per company and per sector, covering all 12
+  stocks and 5 sectors, plus 8 market-wide. The same template can't repeat within
+  `EVENT_REPEAT_GAP` (40) days. Laya labels 44/46 correctly; the keyword counter 37/46.
 - Include both good and bad news; roughly balanced so events add risk, not free money.
 - **E-05 (Phase 5):** a template's true sentiment is the sign of its shock range. Every
   template is all positive or all negative, never straddling 0. Write ~4 **tricky**
@@ -236,14 +265,21 @@ day 0 to the game's current (or final) day, and **only use information up to tha
 
 | Strategy | Rule |
 |---|---|
-| **Your trades** | Re-executes the player's trade log day by day. Its final equity must equal the real game's equity (great test). |
+| **Your trades** | Re-executes the player's trade log day by day. Its final equity must equal the real game's equity (test). |
 | Cash only | Never trades. Baseline. |
+| Hold MKT100 | Day 0: buy max affordable of the whole market. Hold. |
 | Hold MIX6 | Day 0: buy max affordable MIX6. Hold. |
-| DIY equal-weight | Day 0: split cash equally across the 6 stocks, buy max affordable of each. Hold. |
-| All-in one stock | Day 0: buy max affordable of the stock the player spent most on (fallback: highest-volatility stock, NVDA). Hold. |
-| Panic seller | Same as All-in, but sells everything the first day the price closes ≥ `PANIC_DROP` (8%) below its buy price, then stays in cash. |
-| Buy the dip | Day 0: invest 20% of starting cash in MIX6. Each day MIX6 falls ≥ 2% on the day, invest another 20% of starting cash (if cash allows). |
-| DCA weekly | Every 5th day (0, 5, 10, …) invest `STARTING_CASH / ceil(days/5)` in MIX6. |
+| DIY equal-weight | Day 0: split cash equally across all 12 stocks. Hold. |
+| All-in one stock | Day 0: buy max of the stock the player spent most on (fallback NVDA). Hold. |
+| Panic seller | Same as All-in, but sells everything the first day the price is ≥ `PANIC_DROP` (8%) below its buy price, then stays in cash. |
+| Buy the dip | Day 0: 20% of starting cash in MIX6; again after each day MIX6 falls ≥ 2%. |
+| Steady saver | Every 5th day invest `STARTING_CASH / ceil((days+1)/5)` in MKT100 (dollar-cost averaging). |
+| Chase the winner | Every 5 days, switch everything into the stock that rose most over the last 5 days. |
+| Follow the Robo-analyst | Hold MKT100, but sell to cash while the mood detector's downturn chance is > 50% (buy back when it falls). |
+
+Strategies are plain functions with one signature; the ones that need settings are made by
+small "factory" functions (`buy_and_hold("MIX6")` returns a strategy) — functions as values.
+Orders are filled in order, so a strategy can sell and spend the proceeds on the same day.
 
 Output per strategy: final equity, total return, volatility, max drawdown, #trades, fees;
 sorted by final equity; highlight "Your trades" row; ASCII chart of 2–3 chosen curves.
@@ -269,3 +305,103 @@ def relative(symbol, day):             # price relative P[t]/P[0]
 
 Detect cycles (ETF A holds B holds A) at load time with a recursive DFS carrying a
 `visiting` set → raise `DataFileError`. This is a genuine recursion use case for LO7.
+
+
+## 3.11 Robo-analyst — tiny machine learning (E-06, D-31)
+
+*(Retrained for 100 stocks, D-43: mood ≈ 85% vs lazy 80%, catches 42% of downturn days; price ≈ 55% vs 54%.)*
+
+Two **logistic regressions**, written in plain Python (`education/robo_analyst.py`):
+
+```
+z_i   = (x_i − mean_i) / scale_i                    standardise each feature (learnt in training)
+score = b + Σ w_i · z_i
+P     = 1 / (1 + e^(−score))                         the sigmoid: any number → a probability
+loss  = −mean( y·ln P + (1−y)·ln(1−P) )              log loss: big when confident and wrong
+w_i  ← w_i − rate · mean( (P − y) · z_i )            gradient descent, one step per epoch
+```
+
+| Model | Features (from the last 20 days only — no peeking) | Answer y | Unseen-market score |
+|---|---|---|---|
+| Mood detector | MKT100 20-day trend · gap to 20-day average · fall from 20-day high · 10-day swing · 20-day swing | 1 if the hidden mood is bear or crash | ≈ 84% (lazy "never" 80%), catches ≈ 35% of downturn days |
+| Price forecaster | 5-day trend · 20-day trend · gap to average · 10-day swing · market 20-day trend | 1 if the price is higher 5 days later | ≈ 54% (lazy "always up" 54%) |
+
+Training data: 40 markets × 250 days from seeds 50,000,000+ (players' seeds are below 1,000,000);
+test data: 20 more markets. `reasons(features)` returns each `w_i · z_i`, so the screen can show
+*why* the model thinks what it thinks. The largest learnt weights are on the swing features —
+the model rediscovered that **storms mean danger** (the idea behind the VIX).
+
+
+## 3.12 Intraday sessions — prices tick by tick (D-39, `engine/intraday.py`)
+
+The daily closes of §3.2 are fixed first. Day d's **session** fills in 78 five-minute ticks
+(09:30 → 16:00) from yesterday's close `P0` (tick 0, the *reference price*) to today's close `P1`
+(tick 78) with a **Brownian bridge** — a random walk pinned at both ends:
+
+```
+t[k]   = share of the day's variance used by tick k:  t[0]=0, t[1]=GAP (0.2, the opening gap),
+         then evenly to t[78]=1
+W[k]   = W[k−1] + z·√(t[k] − t[k−1])                 a random walk, z ~ N(0,1)
+B[k]   = W[k] − t[k]·W[78]                           the bridge: B[0] = B[78] = 0
+x[k]   = t[k]·(R − J) + J·(k ≥ news) + β·σm·storm·M[k] + σs·storm·E[k]
+price  = round(P0 · e^x[k], 2)                        R = ln(P1/P0), J = ln(1 + news shock)
+```
+
+`M` is one bridge shared by every stock (so the whole board rises and falls together, more for
+high-beta stocks), `E` is each stock's own bridge, `news` is the tick a headline breaks (one
+random tick per day; the affected stocks jump there). ETFs are priced each tick with the §3.3
+formula, so MIX6 at 11:00 is exactly the weighted average of its holdings at 11:00.
+
+**Worked example (shape, not random numbers):** P0 = 100, P1 = 104, no news. At the close
+x = 1·ln(1.04) + 0 + 0 = ln 1.04 → price 104.00 exactly; in between the bridges add noise that
+is largest at lunch (t ≈ 0.5) and zero at both ends.
+
+**Volume** per tick = `TICK_DOLLARS / price × (1 + 1.5·m²) × (0.5 + |step| / usual step)` where
+m runs −1 → 0 → +1 over the day: trading is busiest at the open and the close and on big moves.
+**Order book:** three bids and three asks 0.05% apart around the last price, sizes drawn from a
+seeded RNG. It is cosmetic; orders fill at the last price.
+
+**History before day 0 (D-40):** a warm-up market (seed + 4,000,037, 120 days, 15-minute ticks)
+is rescaled so its last close equals each symbol's day-0 price: `price(−k) = warm(120 − k) ×
+day0 / warm(120)`. Candles for any day come from that day's session: open = first tick,
+high/low = max/min of the ticks, close = last tick, volume = sum.
+
+**Determinism:** day d of seed s uses `Random(s × 100,003 + d + 3,000,017)`, its own RNG, so a
+session is the same whether you watch it live, skip it, or draw its candle later.
+
+## 3.13 Margin trading — leverage (D-41, `engine/margin.py`)
+
+A margin account lets **cash go below zero**; the negative cash is a **loan** from the broker.
+
+```
+equity E          = cash + holdings H                         (as before)
+leverage used     = H / E
+may borrow        = (L − 1) × (E − fee)                         L = allowed leverage, 1…5
+buy allowed if    qty·price + fee ≤ cash + may borrow           → H ≤ L × E after the buy
+maintenance m     = 0.5 / L                                     25% at 2×, 10% at 5×
+margin call when  loan > 0 and E < m × H                        checked every tick while borrowing
+then              sell the biggest holdings until H ≤ L × E     (all of them if E ≤ 0)
+interest          loan × 8% / 252, every night
+```
+
+**Worked example (tests/test_margin.py):** $10,000, L = 2, fee $1. May borrow (2 − 1) × 9,999 =
+**$9,999**. Buy 199 X @ $100 = $19,901 → cash **−$9,901** (the loan), H = 19,900, E = 9,999.
+
+| X falls to | H | E = H − 9,901 | E / H | Margin call (m = 25%)? |
+|---|---|---|---|---|
+| $70 (−30%) | 13,930 | 4,029 | 28.9% | no |
+| $65 (−35%) | 12,935 | 3,034 | 23.5% | **yes** → sell ⌈(12,935 − 2 × 3,033) / 65⌉ = **106** shares |
+| $40 (−60%) | 7,960 | −1,941 | — | wiped out: sell all 199, cash = **−$1,942** still owed |
+
+After selling 106 @ $65: 93 shares left (H = 6,045), cash = −9,901 + 6,890 − 1 = **−$3,012**,
+E = 3,033, leverage 1.99× ≤ 2 ✓. One night's interest on the original loan: 9,901 × 0.08 / 252
+= **$3.14**.
+
+**How far can prices fall?** At full leverage E/H starts at 1/L. A fall x gives
+(1/L − x)/(1 − x) = m = 1/(2L) ⇒ **x = 1/(2L − 1)**: 33% at 2×, 20% at 3×, 11% at 5×.
+Everything is gone after a fall of **1/L**: 50% at 2×, 20% at 5×.
+
+**Leverage Lab (E-08):** the same symbol over the last 60 days with $5,000: 1×, 2×, 3×, 5× on
+margin (rules above, checked at each close) and a **2× daily-reset fund**
+`V[d] = V[d−1] × (1 + 2 × r[d])`. Example of volatility decay: +10% then −10% leaves the market
+at −1% but the 2× fund at 1.2 × 0.8 = **−4%**, worse than 2 × −1%.

@@ -6,86 +6,78 @@
 |---|---|---|
 | Language | Python 3.10+ | Course language; runs with `python3 main.py` |
 | Terminal UI | [`rich`](https://rich.readthedocs.io) | Coloured tables, panels, green/red P&L — a much better 3-min demo for one dependency |
-| Dashboard (Phase 5) | [`textual`](https://textual.textualize.io) | Same authors as rich. Tabs, buttons and mouse in the terminal; it displays our rich renderables directly, so `views.py` is reused (D-17) |
-| Charts | Own ASCII/Unicode line chart in `cli/charts.py` | No extra dependency, and a small algorithm Quang can explain (scale values → rows) |
+| Web app (D-37) | Standard-library `http.server` (JSON API) + hand-written HTML/CSS/JavaScript (ES modules) in `webapp/static/` | A real trading-app look (price board, candlesticks, live ticking) with **no new dependency** and no build step. (It replaced the Streamlit app of D-25/D-32, removed in D-45) |
+| Charts | Own ASCII/Unicode line chart in `cli/charts.py`; in the browser, own canvas charts in `webapp/static/js/chart.js` (candles, volume, moving averages, crosshair) | No chart library: every pixel is code Quang can explain |
+| Machine learning | Own logistic regression + gradient descent in `education/robo_analyst.py` (D-31) | No numpy/sklearn: every line is explainable and it runs anywhere |
 | AI sentiment (Phase 5) | **Laya** (`convaiinnovations/laya`, open weights) run locally on the CPU via the `laya` package (D-21) | Free, offline after one download; only `tradesim/ai/` touches the model (D-20) |
 | Randomness | `random.Random(seed)` | Reproducible markets (needed for replay, tests, demos) |
 | Maths | `statistics` (`mean`, `stdev`), `math` | Standard library — evidences LO11 |
 | Data files | JSON via `json` + `pathlib` | Stock universe, events, scenarios, save files — separates data from code |
-| CLI args | `argparse` | `--seed`, `--days`, `--scenario` |
+| CLI args | `argparse` | `--seed`, `--days`, `--game`, plus optional command words for agent mode (D-26) |
 | Tests | `pytest` (+ `pytest-cov` optional) | Readable asserts, `approx` for floats |
 | Packaging | none — plain folder with `requirements.txt` | Keep it simple |
 
-`requirements.txt`: `rich>=13`, `textual>=1.0`, `laya>=0.4` (pulls in torch + transformers, D-21) · `requirements-dev.txt`: `pytest>=8`, `pytest-cov>=5`
+`requirements.txt`: `rich>=13`, `laya>=0.4` (pulls in torch + transformers, D-21) · `requirements-dev.txt`: `pytest>=8`, `pytest-cov>=5`, `websockets>=17.2` (only for `tools/screenshot.py`)
 
 ## 2.2 Folder structure
 
 ```
 trading-sim/
-├── README.md
-├── requirements.txt
-├── requirements-dev.txt
-├── main.py                      # entry point: parse args → cli.app.run()
+├── README.md · pyproject.toml · uv.lock · requirements*.txt
+├── main.py                      # entry point: REPL, agent mode, or --web (webapp.server.serve)
 ├── data/
-│   ├── universe.json            # stocks + ETFs (symbols, sectors, params, weights)
-│   ├── events.json              # Phase 2: event catalogue (headline templates, shocks)
-│   ├── sentiment_cache.json     # Phase 5: Laya labels keyed by headline text (committed, pre-warmed for the demo)
-│   └── scenarios.json           # X-01: challenge scenarios
+│   ├── universe.json            # 100 stocks in 10 sectors (beta, description) + 14 ETFs
+│   ├── regimes.json             # market moods + Markov transition table (D-30)
+│   ├── events.json              # 84 news templates + keyword-counter word lists
+│   ├── challenges.json          # 9 challenge scenarios (X-01, 2 about leverage)
+│   ├── glossary.json · quiz.json  # Academy content (E-07)
+│   ├── robo_model.json          # trained Robo-analyst weights (E-06, tools/train_robo.py)
+│   └── sentiment_cache.json     # Laya labels keyed by headline (E-05, tools/warm_cache.py)
 ├── tools/
-│   ├── download_model.py       # fetch Laya weights into models/laya (D-21)
-│   ├── warm_cache.py            # label every events.json headline with Laya
-│   └── find_demo_seed.py        # search seeds for a dramatic demo market (see 06)
-├── models/laya/                 # Laya weights, ~808 MB (git-ignored)
-├── saves/                       # X-02: save files (git-ignored)
+│   ├── download_model.py · warm_cache.py   # Laya (E-05)
+│   ├── train_robo.py            # trains both Robo-analyst models, saves data/robo_model.json
+│   └── verify.py                # D-28: play a fixed CLI script / start the web app for checks
+├── docs/ (01–07, debug-log, screenshots/)
 ├── tradesim/
-│   ├── __init__.py
 │   ├── config.py                # ALL tunable constants
-│   ├── loader.py                # read + validate data/*.json → Stock / ETF objects
+│   ├── loader.py                # read + validate data/*.json
 │   ├── engine/                  # pure logic — NO print/input/rich
-│   │   ├── errors.py            # custom exceptions
-│   │   ├── stock.py             # class Stock
-│   │   ├── etf.py               # class ETF (weighted-average pricing)
-│   │   ├── events.py            # class MarketEvent + event generation (Phase 2)
-│   │   ├── market.py            # class Market: generates & serves price history
-│   │   ├── trade.py             # class Trade (one log entry)
-│   │   ├── position.py          # class Position (qty + average cost)
-│   │   ├── portfolio.py         # class Portfolio: cash, positions, buy/sell, P&L
-│   │   ├── analytics.py         # pure functions: returns, volatility, drawdown…
-│   │   └── game.py              # class Game: ties market + portfolio + clock
+│   │   ├── errors.py · stock.py · etf.py · trade.py · position.py · portfolio.py
+│   │   ├── events.py            # MarketEvent + event generation (own RNG, no quick repeats)
+│   │   ├── regime.py            # Regime, RegimeModel (Markov chain of moods), spells()
+│   │   ├── market.py            # Market: moods + GARCH storms + beta → every close, fear gauge,
+│   │   │                        #   sessions, daily bars, order books, 120-day pre-history
+│   │   ├── intraday.py          # Session + Brownian-bridge ticks, volumes, order book (D-39)
+│   │   ├── margin.py            # leverage rules: credit, maintenance, margin call, liquidation (D-41)
+│   │   ├── analytics.py         # returns, volatility, drawdown, moving average…
+│   │   └── game.py              # Game: (day, tick) clock, step/advance, margin checks, reset()
 │   ├── education/               # original features — also NO print/input/rich
-│   │   ├── diversification_lab.py   # E-01
+│   │   ├── diversification_lab.py   # E-01 (+ Monte Carlo)
 │   │   ├── explainer.py             # E-02
-│   │   ├── coach.py                 # E-03
-│   │   ├── strategies.py            # E-04 preset strategies
-│   │   ├── whatif.py                # E-04 replay engine
-│   │   └── headline_lab.py          # E-05 keyword counter + scoring (gets the AI as a function argument)
-│   ├── ai/                      # Phase 5 — the ONLY package that touches the AI model
-│   │   └── sentiment.py         # SentimentClassifier: cache → Laya → None
-│   ├── extensions/              # X-01..X-03, only if time allows
-│   │   ├── scenarios.py
-│   │   └── storage.py
-│   └── cli/                     # the ONLY layer that talks to the user
-│       ├── app.py               # REPL loop + command dispatch (Phase 1; later `--plain`)
-│       ├── tui.py               # Phase 5: Textual dashboard, reuses parser/views/charts
-│       ├── parser.py            # text → Command, input validation
-│       ├── views.py             # build rich Tables/Panels from engine data
-│       └── charts.py            # ASCII line chart + sparkline
-└── tests/
-    ├── conftest.py              # shared fixtures (small fixed market, fresh portfolio)
-    ├── test_loader.py
-    ├── test_etf.py
-    ├── test_market.py
-    ├── test_portfolio.py
-    ├── test_analytics.py
-    ├── test_game.py
-    ├── test_parser.py
-    ├── test_charts.py
-    ├── test_diversification_lab.py
-    ├── test_explainer.py
-    ├── test_coach.py
-    ├── test_whatif.py
-    ├── test_headline_lab.py     # fake classifier — no network
-    └── test_sentiment.py        # cache + fallback, network mocked
+│   │   ├── coach.py                 # E-03 rules + sector exposure
+│   │   ├── strategies.py · whatif.py   # E-04
+│   │   ├── headline_lab.py          # E-05 (AI passed in as a function)
+│   │   ├── robo_analyst.py          # E-06 logistic regression, training, scorecards
+│   │   ├── academy.py               # E-07 glossary lookup + quiz marking
+│   │   ├── achievements.py          # X-05 badges
+│   │   ├── leverage_lab.py          # E-08 Leverage Lab (1×–5× margin, 2× daily fund)
+│   │   └── challenges.py            # X-01 goals
+│   ├── ai/sentiment.py          # the ONLY code that loads Laya (D-21)
+│   ├── cli/                     # talks to the user in the terminal (rich)
+│   │   ├── app.py               # dispatcher: execute / run_command / REPL run()
+│   │   ├── agent.py             # X-06 agent mode
+│   │   ├── parser.py            # text → Command
+│   │   ├── views.py             # core screens (market, quote, portfolio, report…)
+│   │   ├── insights.py          # robo, story, sectors, coach, what-if, tick, leverage screens
+│   │   ├── progress.py          # badges, challenges, glossary, quiz screens
+│   │   └── charts.py            # ASCII line chart + sparkline
+│   ├── webapp/                  # the web app (D-37): stdlib HTTP server + static page
+│   │   ├── server.py            # routes, JSON replies, static files, 400/404/500 handling
+│   │   ├── session.py           # WebSession: the game + notices (toasts) from snapshots
+│   │   ├── api.py               # game → plain dicts: board, clock, account, charts, labs…
+│   │   └── static/              # index.html · css/app.css · js/ (app, board, trade, chart,
+│   │                            #   ticket, portfolio, leverage, pages, store, ui, api, fmt)
+└── tests/                       # one test file per module (+ test_webapp.py with a real HTTP server)
 ```
 
 ## 2.3 Layers and dependency rule
@@ -108,7 +100,20 @@ trading-sim/
 ```
 
 **Rule:** arrows point *down* only. `engine` never imports `education` or `cli`;
-`education` never imports `cli`. This makes every calculation testable without a terminal.
+`education` never imports `cli` or `web`. This makes every calculation testable without a
+terminal. `webapp/`, `web/` and `cli/` sit side by side at the top: a web app changes the
+game only through `cli.app.execute` (`webapp/session.WebSession.run`) and otherwise just reads
+engine data (`webapp/api.py`) to draw the page (D-32, D-37).
+
+**Web app data flow (D-37):**
+
+```
+ browser (js/app.js clock)                 server.py (one thread)          engine
+ every 1/speed s ── POST /api/tick {1} ──► session.run("tick 1") ──► cli.app.execute ──► game.step()
+                 ◄── {clock, account, quotes, notices…} ── api.state(session) ◄── reads Game/Market
+ double-click row ─ POST /api/command {"buy NVDA 10"} ─► same path; TradeSimError → 400 {"error"}
+ chart / labs ───── GET /api/chart?symbol=NVDA&span=1D ─► api.chart() (never past the current tick)
+```
 
 **AI rule (Phase 5):** `ai/sentiment.py` is the only module that touches the Laya model or
 `data/sentiment_cache.json`. `education/headline_lab.py` never imports it. `cli` passes
@@ -218,6 +223,12 @@ classDiagram
     Game --> Portfolio
 ```
 
+Classes added in D-29…D-33 follow the same pattern: `Regime` and `RegimeModel` (engine/regime.py),
+`LogisticModel`, `Scorecard` and `RoboAnalyst` (robo_analyst.py), `Tip` (coach.py), `ReplayResult`
+(whatif.py), `Badge` (achievements.py), `Challenge` and `GoalCheck` (challenges.py).
+`Market` gained `regime_path`, `regime_on(day)`, `fear_index(day)`, `index_symbol()` and
+`sectors()`; `Game` gained `reset()`, `challenge`, `badges`, `commands_used` and `quiz_results`.
+
 Every class implements `__str__` (player-friendly) and `__repr__` (developer-friendly) —
 both are taught in Week 7 and are easy demo talking points.
 
@@ -253,10 +264,22 @@ TradeSimError                      # base — CLI catches this one
 ## 2.6 Main loop and data flow
 
 ```
-main.py ──► parse args (--seed, --days, --scenario, --plain)
-         └► cli.app.run(args)        # Phase 5+: cli.tui.run(args) unless --plain
-                                     # (the Textual app runs the same parse → handler → view
-                                     #  steps from its command box, shown below for the REPL)
+Three front ends, one dispatcher (`cli.app.execute` → HANDLERS → `views.*`):
+
+```
+main.py --seed 42            ─► cli.app.run        REPL, coloured, loops on input()
+main.py [--game F] buy NVDA 20 ─► cli.agent.run_once  agent mode (D-26):
+                                   load F → new_game(seed) → replay F's commands
+                                   → execute(line) → print plain text → save F → exit 0/1
+main.py --web               ─► webapp.server.serve (D-37), one HTTP request per click or tick:
+                                   POST /api/command {"line": "next 5"} → run_command → api.state → JSON
+```
+
+The REPL in detail:
+
+```
+main.py ──► parse args (--seed, --days)
+         └► cli.app.run(args)
                │
                ├─ loader.load_universe("data/universe.json") ─► stocks, etfs
                ├─ Market(stocks, etfs, seed, days)            ─► full price history
