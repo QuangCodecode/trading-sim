@@ -209,6 +209,8 @@ table.board { border-collapse: separate; border-spacing: 0; width: 100%; min-wid
 .board td.sym .etf { font-size: 9px; color: var(--text-muted); margin-left: 4px; font-weight: 600; }
 .board td.ref { color: var(--ref); }
 .board .grp-match { background: rgba(57, 135, 229, 0.05); }
+/* sticky header cells must stay opaque, or scrolled rows show through the tint */
+.board thead th.grp-match { background: linear-gradient(rgba(57, 135, 229, 0.05), rgba(57, 135, 229, 0.05)), var(--surface-2); }
 .board td.match-price { font-weight: 700; }
 .board td.vol { color: var(--text-secondary); }
 .board td.mine { color: var(--text-primary); }
