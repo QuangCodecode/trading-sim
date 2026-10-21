@@ -5,8 +5,9 @@ import io
 import pytest
 from rich.console import Console
 
-from tradesim.cli import app
+from tradesim.cli import app, savegame
 from tradesim.education.headline_lab import Verdict
+from tradesim.engine.errors import TradeSimError
 
 BAD_OR_ODD_LINES = [
     "robo NOPE", "robo a b", "challenge nope", "challenge a b", "learn spaceship", "quiz z",
@@ -96,3 +97,31 @@ def test_final_report_counts_the_last_day_badges():
     finisher = next(i for i, r in enumerate(output) if "Finisher" in str(getattr(r, "plain", r)))
     report = next(i for i, r in enumerate(output) if "Final report" in str(getattr(r, "title", "")))
     assert finisher < report and "finisher" in game.badges
+
+
+# ---------------------------------------------------------------- games (saved games, D-46)
+
+def test_games_with_nothing_saved_says_how_to_start(game, tmp_path):
+    (text,) = app.execute(game, "games", None, tmp_path / "player.db")
+    assert "No saved games" in text
+
+
+def test_games_lists_saved_games_with_results_and_badges(game, tmp_path):
+    db = tmp_path / "player.db"
+    savegame.start_game(db, "agent", app.new_game(5, 10))              # still being played
+    finished = app.new_game(6, 5)
+    finished_id = savegame.start_game(db, "web", finished)
+    app.execute(finished, "buy NVDA 1")
+    app.execute(finished, "next 5")
+    savegame.record(db, finished_id, finished)
+    console = Console(file=io.StringIO(), width=120, color_system=None)
+    console.print(*app.execute(game, "games", None, db))
+    text = console.file.getvalue()
+    assert "Free play, seed 5" in text and "▶ playing now" in text
+    assert "Free play, seed 6" in text and "🏁 finished" in text
+    assert f"Badges won across games: {len(finished.badges)} /" in text
+
+
+def test_games_needs_a_database(game):
+    with pytest.raises(TradeSimError, match="Saved games"):
+        app.execute(game, "games", None, None)

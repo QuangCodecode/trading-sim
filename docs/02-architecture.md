@@ -12,8 +12,8 @@
 | AI sentiment (Phase 5) | **Laya** (`convaiinnovations/laya`, open weights) run locally on the CPU via the `laya` package (D-21) | Free, offline after one download; only `tradesim/ai/` touches the model (D-20) |
 | Randomness | `random.Random(seed)` | Reproducible markets (needed for replay, tests, demos) |
 | Maths | `statistics` (`mean`, `stdev`), `math` | Standard library — evidences LO11 |
-| Data files | JSON via `json` + `pathlib` | Stock universe, events, scenarios, save files — separates data from code |
-| CLI args | `argparse` | `--seed`, `--days`, `--game`, plus optional command words for agent mode (D-26) |
+| Data | SQLite via `sqlite3` (D-46): `data/reference.db` (committed, read-only) + `saves/player.db` (git-ignored) | Stock universe, events, moods, glossary, quiz, challenges, AI labels; saved games and progress. Separates data from code; one small file each |
+| CLI args | `argparse` | `--seed`, `--days`, `--game NAME`, `--db PATH`, plus optional command words for agent mode (D-26) |
 | Tests | `pytest` (+ `pytest-cov` optional) | Readable asserts, `approx` for floats |
 | Packaging | none — plain folder with `requirements.txt` | Keep it simple |
 
@@ -26,13 +26,10 @@ trading-sim/
 ├── README.md · pyproject.toml · uv.lock · requirements*.txt
 ├── main.py                      # entry point: REPL, agent mode, or --web (webapp.server.serve)
 ├── data/
-│   ├── universe.json            # 100 stocks in 10 sectors (beta, description) + 14 ETFs
-│   ├── regimes.json             # market moods + Markov transition table (D-30)
-│   ├── events.json              # 84 news templates + keyword-counter word lists
-│   ├── challenges.json          # 9 challenge scenarios (X-01, 2 about leverage)
-│   ├── glossary.json · quiz.json  # Academy content (E-07)
-│   ├── robo_model.json          # trained Robo-analyst weights (E-06, tools/train_robo.py)
-│   └── sentiment_cache.json     # Laya labels keyed by headline (E-05, tools/warm_cache.py)
+│   ├── reference.db             # SQLite, committed, opened read-only (D-46): stocks (100 in 10 sectors) + etfs (14) +
+│   │                            #   etf_weights, event_templates (84) + event_words, regimes + regime_next/start (D-30),
+│   │                            #   challenges (9), glossary, quiz_questions, sentiment (Laya labels, E-05)
+│   └── robo_model.json          # trained Robo-analyst weights (E-06, tools/train_robo.py) — stays JSON
 ├── tools/
 │   ├── download_model.py · warm_cache.py   # Laya (E-05)
 │   ├── train_robo.py            # trains both Robo-analyst models, saves data/robo_model.json
@@ -40,7 +37,8 @@ trading-sim/
 ├── docs/ (01–07, debug-log, screenshots/)
 ├── tradesim/
 │   ├── config.py                # ALL tunable constants
-│   ├── loader.py                # read + validate data/*.json
+│   ├── database.py              # SQLite: schemas, read-only reference DB, player DB, rows → old-JSON-shaped dicts
+│   ├── loader.py                # validate those dicts into engine objects (DataFileError)
 │   ├── engine/                  # pure logic — NO print/input/rich
 │   │   ├── errors.py · stock.py · etf.py · trade.py · position.py · portfolio.py
 │   │   ├── events.py            # MarketEvent + event generation (own RNG, no quick repeats)
@@ -66,10 +64,11 @@ trading-sim/
 │   ├── cli/                     # talks to the user in the terminal (rich)
 │   │   ├── app.py               # dispatcher: execute / run_command / REPL run()
 │   │   ├── agent.py             # X-06 agent mode
+│   │   ├── savegame.py          # X-02/X-07: a game = seed + commands in saves/player.db; replay on load (D-46)
 │   │   ├── parser.py            # text → Command
 │   │   ├── views.py             # core screens (market, quote, portfolio, report…)
 │   │   ├── insights.py          # robo, story, sectors, coach, what-if, tick, leverage screens
-│   │   ├── progress.py          # badges, challenges, glossary, quiz screens
+│   │   ├── progress.py          # badges, challenges, glossary, quiz, saved-games screens
 │   │   └── charts.py            # ASCII line chart + sparkline
 │   ├── webapp/                  # the web app (D-37): stdlib HTTP server + static page
 │   │   ├── server.py            # routes, JSON replies, static files, 400/404/500 handling
@@ -116,7 +115,7 @@ engine data (`webapp/api.py`) to draw the page (D-32, D-37).
 ```
 
 **AI rule (Phase 5):** `ai/sentiment.py` is the only module that touches the Laya model or
-`data/sentiment_cache.json`. `education/headline_lab.py` never imports it. `cli` passes
+the `sentiment` tables. `education/headline_lab.py` never imports it. `cli` passes
 `sentiment.classify` *in* as a function argument, and tests pass a fake one. AI output
 is display-only and never feeds `Market` (D-20).
 
@@ -242,7 +241,7 @@ TradeSimError                      # base — CLI catches this one
 ├── InsufficientSharesError        # "You hold 5 AAPL, can't sell 10"
 ├── GameOverError                  # "The game has ended. Type report or quit"
 ├── CommandError                   # raised by cli/parser.py: "Usage: buy SYMBOL QTY"
-└── DataFileError                  # bad/missing JSON, weights not summing to 1, …
+└── DataFileError                  # bad/missing/damaged database, weights not summing to 1, …
 ```
 
 ## 2.5 Key design decisions
@@ -268,9 +267,9 @@ Three front ends, one dispatcher (`cli.app.execute` → HANDLERS → `views.*`):
 
 ```
 main.py --seed 42            ─► cli.app.run        REPL, coloured, loops on input()
-main.py [--game F] buy NVDA 20 ─► cli.agent.run_once  agent mode (D-26):
-                                   load F → new_game(seed) → replay F's commands
-                                   → execute(line) → print plain text → save F → exit 0/1
+main.py [--game N] buy NVDA 20 ─► cli.agent.run_once  agent mode (D-26, D-46):
+                                   savegame.load_game → replay the stored commands → execute(line)
+                                   → savegame.save_after → print plain text → exit 0/1
 main.py --web               ─► webapp.server.serve (D-37), one HTTP request per click or tick:
                                    POST /api/command {"line": "next 5"} → run_command → api.state → JSON
 ```
@@ -281,7 +280,7 @@ The REPL in detail:
 main.py ──► parse args (--seed, --days)
          └► cli.app.run(args)
                │
-               ├─ loader.load_universe("data/universe.json") ─► stocks, etfs
+               ├─ loader.load_universe() (data/reference.db) ─► stocks, etfs
                ├─ Market(stocks, etfs, seed, days)            ─► full price history
                ├─ Game(market, Portfolio(STARTING_CASH, FEE_PER_TRADE))
                ├─ show banner + disclaimer + market table
@@ -336,7 +335,7 @@ def compare_strategies(game: Game) -> list[ReplayResult]: ...           # incl. 
 
 # headline_lab.py  (E-05) — pure, no network
 class Verdict:  label ("positive"|"negative"|"neutral"), confidence (0..1), source ("keywords"|"jev")
-def keyword_verdict(headline: str) -> Verdict: ...        # counts words from data/events.json lists
+def keyword_verdict(headline: str) -> Verdict: ...        # counts words from the event_words table
 def truth(event: MarketEvent) -> str: ...                 # sign of event.shock → "positive"/"negative"
 def score(events: list[MarketEvent], classify) -> LabScore: ...   # rows + hits per source
 #   classify(headline) -> Verdict | None   (None = AI unavailable → Laya column shows "—")
@@ -384,7 +383,8 @@ DIP_TRIGGER = 0.02            # Buy-the-dip strategy: MIX6 daily fall that trigg
 DIP_TRANCHE = 0.20            # ... invests 20% of starting cash each time
 DCA_INTERVAL_DAYS = 5
 # Headline Lab (E-05)
-SENTIMENT_CACHE_PATH = DATA_DIR / "sentiment_cache.json"
+REFERENCE_DB_PATH = DATA_DIR / "reference.db"      # D-46
+PLAYER_DB_PATH = PROJECT_ROOT / "saves" / "player.db"
 MODEL_DIR = PROJECT_ROOT / "models" / "laya"
 NEUTRAL_BAND = 0.60               # AI probability below this → shown dimmed as "unsure" (D-22)
 ```

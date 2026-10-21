@@ -44,7 +44,8 @@ The same commands and screens are available in two more front ends:
 | `hl "TEXT"` | | 5 | Classify your own headline with both methods (no truth column — it never happened) |
 | `scenario list` / `scenario start NAME` | | X-01 | Challenge mode |
 | `save [NAME]` / `load NAME` | | X-02 | Save/restore game |
-| `uv run main.py [--game FILE] COMMAND…` | | X-06 | Agent mode: run one command on the saved game and exit (§4.7) |
+| `games` | | X-07 | Your saved games: result vs the market, challenges passed, badges won across games (`history` is still the trade log) |
+| `uv run main.py [--game NAME] [--db PATH] COMMAND…` | | X-06 | Agent mode: run one command on the saved game and exit (§4.7) |
 | `short SYMBOL QTY` | | X-03 | Open/increase a short (cover with `buy`) |
 | `quit` | `exit` | 1 | Confirm, show final report, exit |
 
@@ -209,7 +210,7 @@ Must finish in < 3 s. Shows diversification is about **odds**, not one lucky pat
   quantity is right; for an old day in `news DAY` it might not be).
 - Market-wide events say "Market-wide news can't be diversified away" instead of the
   share sentence (every holding was hit). `news 0` / a future day → friendly error.
-- `data/events.json` ships 46 templates (23 good, 23 bad; D-36), including tricky headlines
+- The `event_templates` table ships 84 templates (23 good, 23 bad; D-36), including tricky headlines
   such as "Walmart sales not as bad as feared", "Electric car boom dents oil demand" and
   "Bank stress fears fade as deposits return". A headline can't repeat within 40 days.
 
@@ -286,13 +287,13 @@ Over all 46 templates (D-36): keywords 37/46, Laya 44/46 (its misses: "Central b
 with rate cut", shown as `negative 53% (unsure)`, and "JPMorgan sets aside billions for bad loans").
 
 **Caching and demo safety (D-20, D-21, D-23)**
-- `classify` checks `data/sentiment_cache.json` first; a hit is used and the model is never loaded.
+- `classify` checks the `sentiment` tables first (shipped labels in `reference.db`, typed headlines in `player.db`); a hit is used and the model is never loaded.
 - On a miss it loads Laya from `models/laya/` (once, ~10 s, CLI shows a spinner), asks it,
   stores the answer, then saves the cache. `HF_HUB_OFFLINE=1` is set so it never goes online.
 - `tools/download_model.py` fetches the weights once; `tools/warm_cache.py` labels every
-  `events.json` headline, so the game shows Laya's answers even on a machine without the model.
-- Headlines the player types with `hl "TEXT"` are cached too (so `git status` will show the
-  cache file changed after playing; revert it before committing if you don't want them).
+  event headline, so the game shows Laya's answers even on a machine without the model.
+- Headlines the player types with `hl "TEXT"` are cached too, in `saves/player.db` (git-ignored),
+  so playing never changes a committed file.
 
 ## 4.4 Web app layout (D-37)
 
@@ -342,7 +343,7 @@ Modelled on a Vietnamese broker's price board: dark, dense, colour-coded, live.
 
 ## 4.5 Extension specs (only if time allows)
 
-**X-01 Challenge scenarios** — `data/scenarios.json`:
+**X-01 Challenge scenarios** — the `challenges` table (the spec below shows the original JSON shape):
 ```json
 {"id": "tech_crash", "title": "Survive the Tech Crash", "seed": 2024, "days": 30,
  "forced_events": [{"day": 8, "template": "chip_curbs", "shock": -0.20}],
@@ -353,10 +354,18 @@ Goal types: `min_equity`, `beat_symbol` (beat buy-and-hold of a symbol), `max_dr
 Show PASS/FAIL + a lesson at the end. Suggested set: Tech Crash, Bull Run (beat MIX6),
 Sideways Market (keep fees < $10 and finish positive).
 
-**X-02 Save / load** — `saves/NAME.json` stores `{version, seed, num_days, day,
-starting_cash, fee, cash, positions, trades, scenario_id}`. On load, rebuild `Market` from
-the seed and **verify** by replaying trades that cash/positions match (detects tampering or
-version mismatch → friendly error). Handle missing file, bad JSON, wrong version.
+**X-02 Save / load (D-46)** — `saves/player.db` (SQLite) has `games` (seed, days, challenge, a `slot` such as
+`agent` or `web` for the current game, and a summary row refreshed after every saved command),
+`commands` (the lines that changed the game, in order), `badges` and `sentiment`. On load, rebuild
+`Market` from the seed and replay the commands through `app.execute`. A command that no longer works,
+a damaged file or another `user_version` → friendly "damaged" error. `new` / `challenge` archive the old
+game (slot → NULL) and start a new row, so nothing is lost. The web app autosaves after every command and
+resumes its last unfinished game on restart; `--seed` starts a fresh one. The REPL keeps nothing.
+
+**X-07 `games`** — one row per saved game (newest first): started, name (challenge title or `Free play, seed N`),
+day, return, market return, result (✅ passed / ❌ failed / 🏁 finished / ▶ playing now / left unfinished), then the
+badges won across all games. `GET /api/games` returns the same rows as JSON. Resuming a full 60-day web game
+(4,680 one-tick commands) takes about 0.6 s.
 
 **X-03 Short selling** — rules in §3.9; `portfolio` shows shorts with a "SHORT" tag and
 negative qty.
@@ -373,10 +382,10 @@ negative qty.
 - `chart` with a flat series (hi == lo) — no division by zero.
 - Very long input, unicode input, only spaces.
 - `--days 1` game; `--seed` negative or huge.
-- `hl` with no downloaded model, `laya` not installed, an odd model answer, or a corrupt `sentiment_cache.json`.
+- `hl` with no downloaded model, `laya` not installed, an odd model answer, or a corrupt `player.db` (treated as an empty cache).
   Each falls back to the keyword counter (a corrupt cache is treated as empty).
 - `hl ""`, `hl` with 201+ characters, `hl` before any news.
-- Agent mode: no game file yet; damaged/edited game file; `--seed` different from the saved game;
+- Agent mode: no saved game yet; damaged/edited database; `--seed` different from the saved game;
   a failing command (exit 1, file unchanged); `quit` (just says "still playing" — use `report`).
 - Web app: bad command in the Command tab; Buy/Sell/Next after game over (buttons disabled);
   `lab` before day 5 (red message in the Lab tab).
@@ -386,27 +395,27 @@ negative qty.
 Lets a script play from a shell, one command per call:
 
 ```bash
-uv run main.py --seed 42 market     # no game file yet → new seed-42 game in saves/agent.json
+uv run main.py --seed 42 market     # no saved game yet → new seed-42 game ('agent') in saves/player.db
 uv run main.py buy NVDA 20          # continues that game
 uv run main.py next 5
 uv run main.py hl "Walmart sales not as bad as feared"
 uv run main.py report
-rm saves/agent.json                 # start over (or use --game other.json for a second game)
+uv run main.py new                  # start over (the old game stays in `games`); or --game NAME for a second game
 ```
 
 - **Output:** first a status line (`Day 5 / 60 · Cash $7,599.00 · Equity $9,943.80 · Seed 42`),
   then the same screens as the REPL with no colour codes, `AGENT_WIDTH` (100) characters wide.
 - **Exit code:** `0` ok; `1` for any `TradeSimError`, printed as one `✗ …` line. Agents can use it to
   notice a rejected trade.
-- **Game file** (`--game`, default `saves/agent.json`):
-  `{"version": 1, "seed": 42, "days": 60, "commands": ["buy NVDA 20", "next 5"]}`
-  - Only successful `buy`/`sell`/`next` lines are stored.
+- **Saved game** (`--game NAME`, default `agent`, in `--db PATH`, default `saves/player.db`): a `games` row
+  (seed, days, challenge) plus its `commands` rows, e.g. `buy NVDA 20`, `next 5`.
+  - Only successful `buy`/`sell`/`next`/`tick`/`quiz`/`leverage` lines are stored.
   - Loading rebuilds the market from the seed and replays them through `app.execute`, giving the
     identical game (D-08). Prices and cash are never stored, so they can't be edited.
-  - `--seed`/`--days` only apply when the file is created. A different `--seed` later is refused.
-  - The file is written only after a `buy`/`sell`/`next` or when `--seed` is given, so `help` or
+  - `--seed`/`--days` only apply when the game is created. A different `--seed` later is refused (use `new SEED`).
+  - A new game is saved only after a state-changing command or when `--seed` is given, so `help` or
     `market` before choosing a seed doesn't lock in a random one.
-  - Bad JSON, wrong version/keys, or a stored command that now fails → `Game file … is damaged`, exit 1.
+  - A damaged database, another version, or a stored command that now fails → `Saved game '…' is damaged`, exit 1.
 - **Prompt to give an agent** (also in the README): *"Play TradeSim. Run `uv run main.py help`
   to see the commands, then `uv run main.py --seed 42 market` to start. Run one command per call
   and try to beat MIX6 by day 60."*

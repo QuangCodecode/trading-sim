@@ -6,6 +6,8 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from tradesim import config
+from tradesim.cli.views import signed
 from tradesim.education import academy, challenges
 from tradesim.education.achievements import BADGES, Badge
 from tradesim.education.challenges import Challenge
@@ -125,3 +127,32 @@ def answer_view(question: dict, correct: bool, score: tuple[int, int]) -> Panel:
                          (f"Score {right}/{asked}. Type quiz for the next question.", "dim"))
     return Panel(body, title="🧠 Quiz", title_align="left",
                  border_style="green" if correct else "red", expand=False, width=86)
+
+
+def games_view(rows: list[dict], catalogue: dict[str, Challenge]) -> Group | str:
+    """Every saved game (newest first) and the badges won across all of them."""
+    if not rows:
+        return ("No saved games yet. They are saved when you play in the web app "
+                "(uv run main.py --web) or in agent mode (uv run main.py --seed 42 market).")
+    table = Table(box=box.SIMPLE_HEAVY, title="📜 Your saved games", title_justify="left")
+    for heading in ("Started", "Game", "Day", "Return", "Market", "Result"):
+        table.add_column(heading)
+    for row in rows:
+        challenge = catalogue.get(row["challenge"]) if row["challenge"] else None
+        name = str(challenge) if challenge else f"Free play, seed {row['seed']}"
+        table.add_row(row["started_at"].replace("T", " "), name, f"{row['day']} / {row['days']}",
+                      signed((row["equity"] / config.STARTING_CASH - 1) * 100, "%", 1),
+                      signed(row["market_return"] * 100, "%", 1), game_result(row))
+    won = {badge for row in rows for badge in row["badges"]}
+    emojis = " ".join(badge.emoji for badge in BADGES if badge.badge_id in won)
+    footer = Text(f"🏅 Badges won across games: {len(won)} / {len(BADGES)}  {emojis}", style="magenta")
+    return Group(table, footer)
+
+
+def game_result(row: dict) -> Text:
+    """'passed' / 'failed' for a finished challenge, 'finished' for free play, else how it stands."""
+    if row["passed"] is not None:
+        return Text("✅ passed", style="green") if row["passed"] else Text("❌ failed", style="red")
+    if row["over"]:
+        return Text("🏁 finished")
+    return Text("▶ playing now" if row["slot"] else "left unfinished", style="dim")

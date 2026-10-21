@@ -15,6 +15,7 @@ from rich.terminal_theme import MONOKAI
 
 from tradesim import config
 from tradesim.cli import app, progress, views
+from tradesim.database import read_games
 from tradesim.education import (academy, challenges, coach, diversification_lab, explainer,
                                 headline_lab, leverage_lab, robo_analyst, whatif)
 from tradesim.education.achievements import BADGES
@@ -22,7 +23,7 @@ from tradesim.engine import analytics, margin
 from tradesim.engine.errors import TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.intraday import Session, clock_text
-from tradesim.loader import load_challenges, load_list
+from tradesim.loader import load_challenges, load_glossary, load_quiz
 from tradesim.webapp.session import WebSession
 
 START_DATE = datetime.date.fromisoformat(config.GAME_START_DATE)
@@ -332,9 +333,9 @@ def robo(session: WebSession) -> dict:
 
 def learn(game: Game) -> dict:
     """Glossary, the next quiz question and the badge wall."""
-    questions = load_list(config.QUIZ_PATH, "questions")
+    questions = load_quiz()
     number, question = academy.current_question(questions, len(game.quiz_results))
-    return {"terms": load_list(config.GLOSSARY_PATH, "terms"),
+    return {"terms": load_glossary(),
             "quiz": {"number": number, "total": len(questions), "question": question["question"],
                      "options": question["options"], "right": sum(game.quiz_results),
                      "answered": len(game.quiz_results)},
@@ -347,4 +348,9 @@ def challenge_list(game: Game) -> list[dict]:
     return [{"id": c.id, "title": c.title, "emoji": c.emoji, "intro": c.intro, "lesson": c.lesson,
              "goals": [progress.goal_text(goal) for goal in c.goals], "start": c.start,
              "playing": game.challenge is not None and game.challenge.id == c.id}
-            for c in load_challenges(config.CHALLENGES_PATH).values()]
+            for c in load_challenges().values()]
+
+
+def games(session: WebSession) -> dict:
+    """The saved games, newest first (empty when this session keeps none)."""
+    return {"games": read_games(session.db_path) if session.db_path else []}

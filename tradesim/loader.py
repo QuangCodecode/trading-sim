@@ -1,8 +1,13 @@
-"""Read and validate data/*.json files into engine objects."""
+"""Read the reference database (data/reference.db) and validate it into engine objects.
+
+The one exception is the Robo-analyst's trained weights, which stay in data/robo_model.json.
+"""
 
 import json
 from pathlib import Path
 
+from tradesim import config
+from tradesim.database import read_section
 from tradesim.education.challenges import Challenge
 from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine.errors import DataFileError
@@ -25,9 +30,9 @@ def read_json(path: Path) -> dict:
         raise DataFileError(f"{path} is not valid JSON: {error}")
 
 
-def load_universe(path: Path) -> tuple[dict[str, Stock], dict[str, ETF]]:
-    """Load stocks and ETFs from `path`, checking every rule in finance model §3.1."""
-    data = read_json(path)
+def load_universe(path: Path = config.REFERENCE_DB_PATH) -> tuple[dict[str, Stock], dict[str, ETF]]:
+    """Load stocks and ETFs from the database at `path`, checking every rule in finance model §3.1."""
+    data = read_section(path, "universe")
     try:
         stocks = {}
         for row in data["stocks"]:
@@ -75,7 +80,7 @@ def _check_etf(etf: ETF, stocks: dict[str, Stock], seen: dict[str, ETF]) -> None
 
 
 class EventCatalogue:
-    """Everything in data/events.json: headline templates and the keyword counter's word lists."""
+    """Everything in the events tables: headline templates and the keyword counter's word lists."""
 
     def __init__(self, templates: list[dict], positive_words: list[str],
                  negative_words: list[str]) -> None:
@@ -88,9 +93,9 @@ class EventCatalogue:
         return f"EventCatalogue({len(self.templates)} templates)"
 
 
-def load_events(path: Path, stocks: dict[str, Stock]) -> EventCatalogue:
+def load_events(stocks: dict[str, Stock], path: Path = config.REFERENCE_DB_PATH) -> EventCatalogue:
     """Load event templates, checking each target exists and its shock has one sign (§3.7)."""
-    data = read_json(path)
+    data = read_section(path, "events")
     try:
         for template in data["templates"]:
             _check_template(template, stocks)
@@ -117,9 +122,9 @@ def _check_template(template: dict, stocks: dict[str, Stock]) -> None:
         raise DataFileError(f"Event {name}: empty headline")
 
 
-def load_regimes(path: Path) -> RegimeModel:
+def load_regimes(path: Path = config.REFERENCE_DB_PATH) -> RegimeModel:
     """Load the market moods and check every probability table sums to 1 (§3.2)."""
-    data = read_json(path)
+    data = read_section(path, "regimes")
     try:
         regimes = {}
         for row in data["regimes"]:
@@ -159,18 +164,20 @@ def load_robo(path: Path) -> RoboAnalyst:
     return robo
 
 
-def load_challenges(path: Path) -> dict[str, Challenge]:
+def load_challenges(path: Path = config.REFERENCE_DB_PATH) -> dict[str, Challenge]:
     """Load the challenge scenarios, keyed by id."""
-    data = read_json(path)
+    data = read_section(path, "challenges")
     try:
         return {row["id"]: Challenge(row) for row in data["challenges"]}
     except (KeyError, TypeError) as error:
         raise DataFileError(f"{path} has a missing or bad field: {error}")
 
 
-def load_list(path: Path, key: str) -> list[dict]:
-    """A list of entries (glossary terms, quiz questions) from one data file."""
-    data = read_json(path)
-    if not isinstance(data.get(key), list):
-        raise DataFileError(f"{path} needs a list called {key}")
-    return data[key]
+def load_glossary(path: Path = config.REFERENCE_DB_PATH) -> list[dict]:
+    """The glossary terms (academy.py looks them up)."""
+    return read_section(path, "glossary")["terms"]
+
+
+def load_quiz(path: Path = config.REFERENCE_DB_PATH) -> list[dict]:
+    """The quiz questions, each with its options, answer index and explanation."""
+    return read_section(path, "quiz")["questions"]

@@ -3,7 +3,7 @@
     uv run main.py --web            then open http://127.0.0.1:8000
 
 GET  /                  the page (static/index.html, which loads static/css + static/js)
-GET  /api/<name>?…      read-only JSON built by webapp/api.py
+GET  /api/<name>?…      read-only JSON built by webapp/api.py (/api/games lists the saved games)
 POST /api/command       {"line": "buy NVDA 10"} → runs it like a terminal player would
 POST /api/tick          {"ticks": 1} → lets the live session run (the page's clock)
 
@@ -56,6 +56,7 @@ GET_ROUTES = {
     "/api/robo": lambda s, p: api.robo(s),
     "/api/learn": lambda s, p: api.learn(s.game),
     "/api/challenges": lambda s, p: {"challenges": api.challenge_list(s.game)},
+    "/api/games": lambda s, p: api.games(s),
     "/api/report": lambda s, p: {"html": api.report_html(s.game)},
 }
 
@@ -158,12 +159,14 @@ class Handler(BaseHTTPRequestHandler):
         """Stay quiet: the clock polls every second, which would flood the terminal."""
 
 
-def serve(seed: int | None, days: int, port: int = config.WEB_PORT, open_browser: bool = True) -> None:
-    """Start one game and answer the browser until Ctrl+C."""
-    Handler.session = WebSession(seed, days)
+def serve(seed: int | None, days: int, port: int = config.WEB_PORT, open_browser: bool = True,
+          db_path: Path = config.PLAYER_DB_PATH) -> None:
+    """Start (or resume) one game, saved in `db_path`, and answer the browser until Ctrl+C."""
+    Handler.session = WebSession(seed, days, db_path=db_path)
     server = HTTPServer((config.WEB_HOST, port), Handler)
     url = f"http://{config.WEB_HOST}:{port}"
-    print(f"TradeSim is running at {url}  (seed {Handler.session.game.market.seed}) — Ctrl+C to stop", flush=True)
+    game = Handler.session.game
+    print(f"TradeSim is running at {url}  (seed {game.market.seed}, day {game.day}) — Ctrl+C to stop", flush=True)
     if open_browser:
         webbrowser.open(url)
     try:

@@ -5,10 +5,12 @@ import random
 from rich.console import Console
 
 import difflib
+from pathlib import Path
 
 from tradesim import config
 from tradesim.ai.sentiment import SentimentClassifier
 from tradesim.cli import insights, parser, progress, views
+from tradesim.database import read_games
 from tradesim.education import (academy, achievements, coach, diversification_lab,
                                 headline_lab, leverage_lab, whatif)
 from tradesim.education.challenges import Challenge
@@ -17,7 +19,7 @@ from tradesim.engine.errors import CommandError, TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.market import Market
 from tradesim.engine.portfolio import Portfolio
-from tradesim.loader import (load_challenges, load_events, load_list, load_regimes, load_robo,
+from tradesim.loader import (load_challenges, load_events, load_glossary, load_quiz, load_regimes, load_robo,
                              load_universe)
 
 MAX_SEED = 1_000_000
@@ -33,9 +35,9 @@ def new_game(seed: int | None, days: int, challenge: Challenge | None = None) ->
     if seed is None:
         # A seed is chosen once and shown, so any game can be replayed with --seed.
         seed = random.SystemRandom().randrange(MAX_SEED)
-    stocks, etfs = load_universe(config.UNIVERSE_PATH)
-    templates = load_events(config.EVENTS_PATH, stocks).templates
-    regimes = load_regimes(config.REGIMES_PATH)
+    stocks, etfs = load_universe()
+    templates = load_events(stocks).templates
+    regimes = load_regimes()
     market = Market(stocks, etfs, seed, days, templates, regime_model=regimes,
                     prehistory_days=config.PREHISTORY_DAYS)
     game = Game(market, Portfolio(config.STARTING_CASH, config.FEE_PER_TRADE), challenge)
@@ -204,7 +206,7 @@ def do_news(game: Game, args: list) -> object:
 
 def do_headlines(game: Game, args: list, ai: SentimentClassifier | None) -> object:
     classify = ai.classify if ai else no_ai
-    words = load_events(config.EVENTS_PATH, game.market.stocks)
+    words = load_events(game.market.stocks)
     if args:
         keywords = headline_lab.keyword_verdict(args[0], words.positive_words, words.negative_words)
         return views.own_headline_view(args[0], keywords, classify(args[0]))
@@ -262,8 +264,14 @@ def do_badges(game: Game, args: list) -> object:
     return progress.badges_view(game)
 
 
+def do_games(game: Game, args: list, db_path: Path | None) -> object:
+    if db_path is None:
+        raise TradeSimError("Saved games aren't kept in this session.")
+    return progress.games_view(read_games(db_path), load_challenges())
+
+
 def do_challenge(game: Game, args: list) -> object:
-    catalogue = load_challenges(config.CHALLENGES_PATH)
+    catalogue = load_challenges()
     if not args:
         return progress.challenges_view(catalogue)
     if args[0] not in catalogue:
@@ -292,14 +300,14 @@ def do_new(game: Game, args: list) -> object:
 
 
 def do_learn(game: Game, args: list) -> object:
-    terms = load_list(config.GLOSSARY_PATH, "terms")
+    terms = load_glossary()
     if not args:
         return progress.glossary_view(terms)
     return progress.term_view(academy.find_term(terms, args[0]))
 
 
 def do_quiz(game: Game, args: list) -> object:
-    questions = load_list(config.QUIZ_PATH, "questions")
+    questions = load_quiz()
     number, question = academy.current_question(questions, len(game.quiz_results))
     if not args:
         return progress.question_view(number, question, len(questions), quiz_score(game))
@@ -329,9 +337,12 @@ HANDLERS = {
 
 # These commands also need the AI classifier (the rest only need the game).
 AI_HANDLERS = {"next": do_next, "headlines": do_headlines}
+# These read the player database (None = this session keeps no saved games).
+DB_HANDLERS = {"games": do_games}
 
 
-def execute(game: Game, line: str, ai: SentimentClassifier | None = None) -> list:
+def execute(game: Game, line: str, ai: SentimentClassifier | None = None,
+            db_path: Path | None = config.PLAYER_DB_PATH) -> list:
     """Run one input line and return what to print. Raises TradeSimError on bad input."""
     command = parser.parse(line)
     if command is None:
@@ -340,6 +351,8 @@ def execute(game: Game, line: str, ai: SentimentClassifier | None = None) -> lis
         return ["Cancelled — still playing."]
     if command.name in AI_HANDLERS:
         result = AI_HANDLERS[command.name](game, command.args, ai)
+    elif command.name in DB_HANDLERS:
+        result = DB_HANDLERS[command.name](game, command.args, db_path)
     elif command.name in HANDLERS:
         result = HANDLERS[command.name](game, command.args)
     else:

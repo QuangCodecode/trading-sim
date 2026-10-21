@@ -12,7 +12,7 @@ class Challenge:
     """One scenario: which market, what you start with, and what counts as winning."""
 
     def __init__(self, data: dict) -> None:
-        """Copy the fields of one entry in data/challenges.json."""
+        """Copy the fields of one row of the challenges table."""
         self.id = data["id"]
         self.title = data["title"]
         self.emoji = data["emoji"]
@@ -50,7 +50,7 @@ def symbol_return(game: Game, symbol: str) -> float:
 
 
 def check_goal(game: Game, goal: dict) -> GoalCheck:
-    """Measure one goal from data/challenges.json against the game right now."""
+    """Measure one goal from the challenges table against the game right now."""
     prices, account = game.current_prices(), game.portfolio
     kind, value = goal["type"], goal.get("value")
     equity = account.equity(prices)

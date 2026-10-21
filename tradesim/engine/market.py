@@ -22,8 +22,8 @@ class Market:
                  ticks_per_day: int = config.TICKS_PER_DAY) -> None:
         """Generate the market's moods, news events and stock prices, then derive ETF prices.
 
-        `event_templates` comes from data/events.json (None = no news) and `regime_model`
-        from data/regimes.json (None = one calm mood, no trends).
+        `event_templates` are the rows of the events table (None = no news) and `regime_model`
+        comes from the regimes tables (None = one calm mood, no trends).
         `stock_prices` is only passed by `from_prices` so tests can inject exact paths.
         `prehistory_days` adds that many days of price history before day 0 (for charts).
         """

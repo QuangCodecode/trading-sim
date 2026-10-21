@@ -1,36 +1,46 @@
-"""cli/agent.py (X-06): one command per call, game kept in a JSON file. Never loads Laya."""
+"""cli/agent.py (X-06): one command per call, game kept in the player database. Never loads Laya."""
 
-import json
+from contextlib import closing
 
 import pytest
 
 import main
-from tradesim.cli import agent, app
+from tradesim import config
+from tradesim.cli import agent, app, savegame
+from tradesim.database import open_player, read_games
 from tradesim.engine.errors import CommandError, TradeSimError
 
 
 @pytest.fixture
 def path(tmp_path):
-    """Where this test's game file lives (deleted after the test)."""
-    return tmp_path / "saves" / "agent.json"
+    """Where this test's player database lives (deleted after the test)."""
+    return tmp_path / "saves" / "player.db"
 
 
 def run(path, line, seed=None, days=10):
-    """One agent call, like `uv run main.py --game PATH LINE`."""
-    return agent.run_once(path, seed, days, line)
+    """One agent call, like `uv run main.py --db PATH LINE`."""
+    return agent.run_once(path, config.AGENT_SLOT, seed, days, line)
 
 
-def test_first_call_creates_the_file_with_the_seed(path):
+def commands(path, game_id=None):
+    """The stored command lines of one game (the current game if no id is given)."""
+    with closing(open_player(path)) as db:
+        game_id = game_id or db.execute("SELECT id FROM games WHERE slot = ?", (config.AGENT_SLOT,)).fetchone()[0]
+        rows = db.execute("SELECT line FROM commands WHERE game_id = ? ORDER BY position", (game_id,))
+        return [row["line"] for row in rows]
+
+
+def test_first_call_saves_the_game_with_its_seed(path):
     assert run(path, "market", seed=42) == 0
-    state = json.loads(path.read_text())
-    assert (state["seed"], state["days"], state["commands"]) == (42, 10, [])
+    (game,) = read_games(path)
+    assert (game["seed"], game["days"], game["slot"], commands(path)) == (42, 10, "agent", [])
 
 
-def test_looking_without_a_seed_creates_no_file(path):
+def test_looking_without_a_seed_saves_no_game(path):
     assert run(path, "help") == 0
-    assert not path.exists()
+    assert read_games(path) == []
     assert run(path, "market", seed=42) == 0  # so the seed chosen next still applies
-    assert json.loads(path.read_text())["seed"] == 42
+    assert read_games(path)[0]["seed"] == 42
 
 
 def test_only_successful_state_changes_are_recorded(path):
@@ -38,13 +48,13 @@ def test_only_successful_state_changes_are_recorded(path):
     run(path, "market")
     assert run(path, "buy XYZ 1") == 1
     run(path, "next 3")
-    assert json.loads(path.read_text())["commands"] == ["buy NVDA 2", "next 3"]
+    assert commands(path) == ["buy NVDA 2", "next 3"]
 
 
 def test_state_carries_over_between_calls(path):
     run(path, "buy NVDA 2", seed=42)
     run(path, "next 3")
-    game, _ = agent.load_game(path)
+    game, _ = savegame.load_game(path, config.AGENT_SLOT)
     assert game.day == 3
     assert game.portfolio.qty_held("NVDA") == 2
     assert game.portfolio.cash < 10_000
@@ -56,23 +66,38 @@ def test_replay_matches_playing_in_one_session(path):
     live = app.new_game(7, 10)
     for line in ["buy NVDA 5", "next 4", "sell NVDA all", "buy MIX6 max", "next 2"]:
         app.execute(live, line)
-    replayed, _ = agent.load_game(path)
+    replayed, _ = savegame.load_game(path, config.AGENT_SLOT)
     assert replayed.equity() == pytest.approx(live.equity())
 
 
-@pytest.mark.parametrize("content", [
-    "{not json",
-    '{"version": 99, "seed": 1, "days": 10, "commands": []}',
-    '{"version": 1, "seed": "x", "days": 10, "commands": []}',
-    '{"version": 1, "seed": 1, "days": 10, "commands": ["buy NVDA 999999"]}',
-    "[]",
-])
-def test_damaged_file_is_a_friendly_error_and_left_alone(path, capsys, content):
+def damage_garbage(path):
     path.parent.mkdir(parents=True)
-    path.write_text(content)
+    path.write_bytes(b"not a database " * 20)
+
+
+def damage_version(path):
+    with closing(open_player(path)) as db:
+        db.execute("PRAGMA user_version = 99")
+
+
+def damage_command(path):
+    run(path, "market", seed=1)
+    with closing(open_player(path)) as db, db:
+        db.execute("INSERT INTO commands VALUES (1, 0, 'buy NVDA 999999')")   # can't be afforded
+
+
+def damage_challenge(path):
+    run(path, "market", seed=1)
+    with closing(open_player(path)) as db, db:
+        db.execute("UPDATE games SET challenge = 'nope'")
+
+
+@pytest.mark.parametrize("damage", [damage_garbage, damage_version, damage_command, damage_challenge])
+def test_damaged_database_is_a_friendly_error(path, capsys, damage):
+    damage(path)
+    capsys.readouterr()
     assert run(path, "market") == 1
     assert "damaged" in capsys.readouterr().out
-    assert path.read_text() == content
 
 
 def test_other_seed_than_the_saved_game_is_refused(path, capsys):
@@ -101,24 +126,32 @@ def test_no_command_words_means_the_repl():
     assert " ".join(args.command) == "buy NVDA 20"
 
 
-def test_challenge_rewrites_the_file_and_replays_after_it(path):
+def test_challenge_starts_a_new_game_and_replays_after_it(path):
     assert run(path, "challenge tech", seed=42) == 0
-    state = json.loads(path.read_text())
-    assert state["challenge"] == "tech" and state["seed"] == 506 and state["commands"] == []
+    (saved,) = read_games(path)
+    assert saved["challenge"] == "tech" and saved["seed"] == 506 and commands(path) == []
     assert run(path, "next 3") == 0
-    game, _ = agent.load_game(path)
+    game, _ = savegame.load_game(path, config.AGENT_SLOT)
     assert game.challenge.id == "tech" and game.day == 3 and game.portfolio.qty_held("TECH3") > 0
 
 
-def test_new_starts_a_fresh_file(path):
+def test_new_starts_a_fresh_game_and_keeps_the_old_one_in_history(path):
     run(path, "buy NVDA 2", seed=42)
     assert run(path, "new 9") == 0
-    state = json.loads(path.read_text())
-    assert state["seed"] == 9 and state["commands"] == [] and state["challenge"] is None
+    newest, older = read_games(path)
+    assert (newest["seed"], newest["slot"], commands(path)) == (9, "agent", [])
+    assert (older["seed"], older["slot"], commands(path, older["id"])) == (42, None, ["buy NVDA 2"])
+
+
+def test_two_slots_are_two_games(path):
+    agent.run_once(path, "alice", 1, 10, "buy NVDA 1")
+    agent.run_once(path, "bob", 2, 10, "market")
+    assert {g["slot"]: g["seed"] for g in read_games(path)} == {"alice": 1, "bob": 2}
 
 
 def test_quiz_answers_are_remembered(path):
     run(path, "market", seed=42)
     assert run(path, "quiz b") == 0
-    game, _ = agent.load_game(path)
+    game, _ = savegame.load_game(path, config.AGENT_SLOT)
     assert len(game.quiz_results) == 1
+    assert read_games(path)[0]["quiz_answered"] == 1

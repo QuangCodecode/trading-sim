@@ -64,10 +64,10 @@ really does to you.
 ```bash
 uv run main.py --web                 # browser → http://127.0.0.1:8000  (add --seed 39 for the demo market)
 uv run main.py --seed 42             # terminal
-uv run pytest                        # 314 tests
+uv run pytest                        # 346 tests
 ```
 Optional, once: `uv run tools/download_model.py` (Laya AI weights, ~808 MB). Without it the
-Headline Lab uses the saved answers in `data/sentiment_cache.json`.
+Headline Lab uses the saved answers in `data/reference.db`.
 
 Without uv: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt`,
 then `python3 main.py --web`.
@@ -76,14 +76,21 @@ then `python3 main.py --web`.
 Buy 50% → watch it tick → **To close ⏭** → read the closing bell → try the **Leverage** page.
 In the terminal: `market tech` → `buy MIX6 max` → `tick 12` → `next 5` → `leverage 2` → `levlab`.
 
+**Where the data lives (SQLite):** `data/reference.db` is the game's content (stocks, ETFs, news,
+market moods, glossary, quiz, challenges, Laya labels). It is committed, and the game opens it
+read-only; edit it with `sqlite3 data/reference.db`. `saves/player.db` holds your games (git-ignored):
+the web app resumes your last unfinished game when you restart it (`--seed` starts a fresh one).
+Type `games` in any front end to see your results and badges.
+
 ## Let your AI agent play
 
 ```bash
-uv run main.py --seed 42 market   # first call starts a seed-42 game in saves/agent.json
+uv run main.py --seed 42 market   # first call starts a seed-42 game in saves/player.db
 uv run main.py buy NVDA 20
 uv run main.py next 5
 uv run main.py challenge crash    # or start a challenge
-rm saves/agent.json               # start over (or --game other.json for a second game)
+uv run main.py new                # start over (or --game NAME for a second game)
+uv run main.py games              # your saved games, results and badges
 ```
 
 > Play TradeSim, a stock-trading simulator, in this folder. Run `uv run main.py help` for the
@@ -95,7 +102,7 @@ rm saves/agent.json               # start over (or --game other.json for a secon
 | Command | What it does |
 |---|---|
 | `uv run tools/train_robo.py` | Retrain the Robo-analyst (after changing the price model) |
-| `uv run tools/warm_cache.py` | Label new `events.json` headlines with Laya |
+| `uv run tools/warm_cache.py` | Label new news headlines (the `event_templates` table) with Laya |
 | `uv run tools/find_demo_seed.py` | Find a dramatic market for the demo (seed 39) |
 | `uv run tools/verify.py cli` | Play a fixed 45-step script through agent mode → `verify-out/cli.txt` |
 | `uv run tools/verify.py web` | Start the web app on port 8599 (seed 42) for browser checks |

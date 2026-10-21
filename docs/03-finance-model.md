@@ -5,7 +5,7 @@ Every number the game shows comes from a formula on this page. Each worked examp
 
 Notation: `P[s][t]` = price of symbol `s` on day `t`. Day 0 = starting prices.
 
-## 3.1 Stock universe (`data/universe.json`)
+## 3.1 Stock universe (`stocks`, `etfs` and `etf_weights` tables in `data/reference.db`)
 
 Tickers are real (for familiarity); **all prices and parameters are invented** (D-04).
 Since D-38 there are **100 stocks in 10 sectors** (the table shows the original 12). `drift` is the stock's own extra daily
@@ -68,7 +68,7 @@ crash), **calm and stormy spells** (big moves cluster), and stocks that follow t
 
 ```
 mood_t        Markov chain over {bull, sideways, bear, crash}: tomorrow's mood is drawn from
-              today's row of the transition table in data/regimes.json (own RNG, D-09 style)
+              today's row of the transition table (`regime_next` in data/reference.db) (own RNG, D-09 style)
 
 nervous_t   = (1 − α − β) + α · z_{t−1}² + β · nervous_{t−1}        GARCH(1,1), average 1
 storm_t     = vol_scale(mood_t) · √nervous_t                          1 = normal, 2.6 = crash
@@ -232,7 +232,7 @@ cash < FEE, as long as `q·p ≥ FEE`; otherwise reject.
 
 ## 3.7 Market events (Phase 2, E-02)
 
-`data/events.json` holds templates:
+The `event_templates` table in `data/reference.db` holds templates (shown here in their original JSON shape, which `database.py` still returns):
 
 ```json
 {"id": "chip_curbs", "scope": "sector", "target": "Tech",
@@ -255,7 +255,7 @@ cash < FEE, as long as `q·p ≥ FEE`; otherwise reject.
   - "Walmart sales not as bad as feared" (positive, but uses "bad")
   - "Oil glut fears ease as demand recovers" (positive, but uses "fears")
   - "Record highs fail to hold as chip rally fizzles" (negative, but uses "record", "rally")
-- `events.json` also holds two small word lists for the keyword counter:
+- The `event_words` table also holds two small word lists for the keyword counter:
   `"positive_words": [...]` and `"negative_words": [...]` (~20 each).
 
 ## 3.8 What-if strategies (Phase 4, E-04)

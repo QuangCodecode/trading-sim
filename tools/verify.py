@@ -67,12 +67,13 @@ CLI_SCRIPT = [
     ("challenge nope", 1),
     ("challenge tech", 0),
     ("next 60", 0),
+    ("games", 0),
 ]
 
 
-def run_step(game_file: Path, line: str) -> subprocess.CompletedProcess:
-    """One agent-mode call: python main.py --game FILE <line>."""
-    command = [sys.executable, "main.py", "--game", str(game_file)] + shlex.split(line)
+def run_step(db_file: Path, line: str) -> subprocess.CompletedProcess:
+    """One agent-mode call: python main.py --db FILE <line> (a throwaway player database)."""
+    command = [sys.executable, "main.py", "--db", str(db_file)] + shlex.split(line)
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True)
 
 
@@ -81,9 +82,9 @@ def verify_cli() -> int:
     OUT_DIR.mkdir(exist_ok=True)
     transcript, failures = [], 0
     with tempfile.TemporaryDirectory() as tmp:
-        game_file = Path(tmp) / "verify.json"
+        db_file = Path(tmp) / "verify.db"
         for line, expected in CLI_SCRIPT:
-            result = run_step(game_file, line)
+            result = run_step(db_file, line)
             ok = result.returncode == expected and "Traceback" not in result.stderr
             failures += not ok
             print(f"{'ok  ' if ok else 'FAIL'} exit {result.returncode} (want {expected})  {line}")
@@ -104,9 +105,15 @@ def web_is_up() -> bool:
 
 
 def verify_web() -> int:
-    """Start the web app (seed 42), wait until it answers, then keep it running until Ctrl+C."""
+    """Start the web app (seed 42, throwaway player database), wait until it answers, keep it running."""
+    with tempfile.TemporaryDirectory() as tmp:
+        return run_web(Path(tmp) / "verify-web.db")
+
+
+def run_web(db_file: Path) -> int:
+    """The body of verify_web, so the temporary database lives as long as the server."""
     server = subprocess.Popen([sys.executable, "main.py", "--web", "--seed", "42", "--no-browser",
-                               "--port", str(WEB_PORT)], cwd=ROOT)
+                               "--port", str(WEB_PORT), "--db", str(db_file)], cwd=ROOT)
     deadline = time.monotonic() + WEB_START_TIMEOUT_S
     while not web_is_up():
         if server.poll() is not None or time.monotonic() > deadline:

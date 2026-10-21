@@ -31,6 +31,7 @@ COMMANDS = {
     "coach": ("coach", "Trade Coach: tips about your investing habits"),
     "whatif": ("whatif", "What-if Replay: 11 strategies on the same market, ranked"),
     "badges": ("badges", "Your achievements"),
+    "games": ("games", "Your saved games: results, challenges passed and badges across all of them"),
     "challenge": ("challenge [NAME]", "List the challenges, or start one, e.g. challenge crash"),
     "learn": ("learn [TERM]", "Glossary of investing words, e.g. learn beta"),
     "quiz": ("quiz [A-D]", "Quiz yourself: quiz shows a question, quiz B answers it"),

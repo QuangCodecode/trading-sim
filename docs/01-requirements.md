@@ -66,11 +66,12 @@
 
 | ID | Extension | Notes |
 |---|---|---|
-| X-01 | Challenge scenarios ✅ (7 built, D-33) | Fixed seed + forced events + goal (e.g. "Tech Crash: finish ≥ $9,500"). Stored in `data/scenarios.json`. |
-| X-02 | Save / load game | JSON file stores seed, day, portfolio, trade log. Market is regenerated from the seed (no need to store prices). |
+| X-01 | Challenge scenarios ✅ (7 built, D-33) | Fixed seed + forced events + goal (e.g. "Tech Crash: finish ≥ $9,500"). Stored in the `challenges` table of `data/reference.db` (D-46). |
+| X-02 | Save / load game ✅ (D-46) | `saves/player.db` stores the seed and the commands that changed the game; the market is regenerated from the seed and the commands replayed (no prices stored). Agent mode and the web app save and resume. |
 | X-03 | Short selling | Negative quantity; collateral rule in §3.9. One P&L formula works for long and short. |
 | X-05 | Achievements ✅ (16 badges, D-33) | Wall Street Survivor-style badges checked by small rule functions (like the Coach): "Diversified" (≥ 3 sectors, no stock > 30%), "Diamond hands" (held MIX6 through a ≥ 5% dip), "Fee-aware" (fees < $5 at game end). Shown in the end report. |
-| X-06 | Agent mode | `uv run main.py [--game FILE] COMMAND…` runs one command on a saved game and prints plain text, so a script can play from a shell. Spec in docs/04 §4.7 (D-26). |
+| X-06 | Agent mode | `uv run main.py [--game NAME] COMMAND…` runs one command on a saved game and prints plain text, so a script can play from a shell. Spec in docs/04 §4.7 (D-26). |
+| X-07 | Saved games and progress ✅ (D-46, D-47) | The `games` command (and `/api/games`) lists every saved game: result vs the market, challenges passed, badges won across games. |
 | X-04 | Second ETF + fund-of-funds | A sector ETF (`TECH2`) and optionally an ETF that holds another ETF, priced **recursively** — a natural, non-contrived use of recursion (LO7). |
 
 ## 1.6 Explicit non-goals (do NOT build)

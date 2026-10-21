@@ -80,8 +80,8 @@ a working version early and upgrade it.
 
 **5c Agent mode (X-06, D-26)**
 - [x] `cli/app.py` split into `execute` (raises) + `run_command` (catches)
-- [x] `cli/agent.py`: game file `{version, seed, days, commands}`, replay on load, plain text, exit 0/1
-- [x] `main.py`: optional command words + `--game`
+- [x] `cli/agent.py`: saved game = seed + days + commands (now in SQLite, D-46), replay on load, plain text, exit 0/1
+- [x] `main.py`: optional command words + `--game NAME` + `--db`
 - [x] `tests/test_agent.py`; README section with a prompt for agents
 
 **5b Headline Lab (E-05)**
@@ -91,11 +91,11 @@ a working version early and upgrade it.
 - [x] `ai/sentiment.py`: cache → Laya (local, lazy) → `None` on any failure
 - [x] `headlines` / `hl "TEXT"` command + Laya label on the news line
 - [x] Headlines tab (in the 5a web app)
-- [x] `tools/warm_cache.py`; commit a warmed `data/sentiment_cache.json`
+- [x] `tools/warm_cache.py`; commit a warmed `data/reference.db` (`sentiment` table)
 - [x] Tests: fake classifier, offline fallback, corrupt cache, tricky-headline keyword misses
 
 ### Phase 6 — Extensions (pick in this order; skip freely)
-- [ ] X-02 Save/load (small, useful for the demo — start the demo from a save)
+- [x] X-02 Save/load (D-46: `saves/player.db`, agent mode + web app) and X-07 `games` / `/api/games`
 - [x] X-05 Achievements (16 badges)
 - [x] X-01 Challenge scenarios (7, fixed seeds with story tests)
 - [ ] X-04 TECH2 + fund-of-funds recursive pricing (evidences recursion, LO7)

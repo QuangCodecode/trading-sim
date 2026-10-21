@@ -1,7 +1,7 @@
 """E-07 Academy: a glossary of investing words and a quiz that checks understanding.
 
-Plain data in data/glossary.json and data/quiz.json; these functions only look things up
-and mark answers, so the CLI and the web app show the same lessons.
+Plain data from the glossary and quiz_questions tables (data/reference.db); these functions only look
+things up and mark answers, so the CLI and the web app show the same lessons.
 """
 
 import difflib

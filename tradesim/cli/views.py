@@ -183,7 +183,7 @@ def quote_panel(game: Game, symbol: str, outlook: Text | None = None) -> Panel:
 
 
 def profile_line(game: Game, symbol: str) -> str:
-    """The company or fund description from data/universe.json."""
+    """The company or fund description from the universe tables (data/reference.db)."""
     market = game.market
     source = market.etfs[symbol] if market.is_etf(symbol) else market.stocks[symbol]
     return source.description or market.name_of(symbol)

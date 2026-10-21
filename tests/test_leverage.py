@@ -99,7 +99,7 @@ def test_market_filters_by_sector():
 
 
 def test_margin_madness_punishes_doing_nothing():
-    challenge = load_challenges(config.CHALLENGES_PATH)["margin"]
+    challenge = load_challenges()["margin"]
     game = app.new_game(None, 0, challenge)
     assert game.portfolio.max_leverage == 3 and game.portfolio.loan() > 0
     app.execute(game, "next 60")

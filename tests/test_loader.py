@@ -1,10 +1,10 @@
-"""Loading and validating data/universe.json and data/events.json."""
+"""Loading and validating the reference database (stocks, ETFs, news templates, market moods)."""
 
 import json
 
 import pytest
 
-from tradesim import config
+from tradesim.database import write_reference
 from tradesim.engine.errors import DataFileError
 from tradesim.loader import load_events, load_regimes, load_universe
 
@@ -18,8 +18,9 @@ GOOD = {
 
 
 def write(tmp_path, data):
-    path = tmp_path / "universe.json"
-    path.write_text(json.dumps(data))
+    """A reference database holding only this universe."""
+    path = tmp_path / "reference.db"
+    write_reference(path, {"universe": data})
     return path
 
 
@@ -55,21 +56,22 @@ def test_duplicate_symbol_rejected(tmp_path):
 
 
 def test_missing_file_names_the_path(tmp_path):
-    missing = tmp_path / "nope.json"
-    with pytest.raises(DataFileError, match="nope.json"):
+    missing = tmp_path / "nope.db"
+    with pytest.raises(DataFileError, match="nope.db"):
         load_universe(missing)
 
 
-def test_bad_json_rejected(tmp_path):
-    path = tmp_path / "universe.json"
-    path.write_text("{not json")
-    with pytest.raises(DataFileError):
+@pytest.mark.parametrize("content", [b"{not a database " * 20, b""])
+def test_damaged_database_rejected(tmp_path, content):
+    path = tmp_path / "reference.db"
+    path.write_bytes(content)              # garbage, or an empty file with no tables
+    with pytest.raises(DataFileError, match="reference.db"):
         load_universe(path)
 
 
 def test_real_events_load_with_balanced_good_and_bad_news(universe):
     stocks, _etfs = universe
-    catalogue = load_events(config.EVENTS_PATH, stocks)
+    catalogue = load_events(stocks)
     good = [t for t in catalogue.templates if t["shock_min"] > 0]
     assert len(catalogue.templates) >= 12
     assert len(good) == len(catalogue.templates) / 2
@@ -80,9 +82,9 @@ def event_file(tmp_path, **changes):
     template = {"id": "t", "scope": "sector", "target": "Tech", "shock_min": -0.1,
                 "shock_max": -0.05, "headline": "h", "explanation": "e"}
     template.update(changes)
-    path = tmp_path / "events.json"
-    path.write_text(json.dumps({"templates": [template], "positive_words": [],
-                                "negative_words": []}))
+    path = tmp_path / "reference.db"
+    write_reference(path, {"events": {"templates": [template], "positive_words": [],
+                                      "negative_words": []}})
     return path
 
 
@@ -96,11 +98,11 @@ def event_file(tmp_path, **changes):
 def test_bad_event_templates_rejected(universe, tmp_path, changes, message):
     stocks, _etfs = universe
     with pytest.raises(DataFileError, match=message):
-        load_events(event_file(tmp_path, **changes), stocks)
+        load_events(stocks, event_file(tmp_path, **changes))
 
 
 def test_real_regimes_load_and_every_table_sums_to_one():
-    model = load_regimes(config.REGIMES_PATH)
+    model = load_regimes()
     assert set(model.regimes) == {"bull", "sideways", "bear", "crash"}
     for regime in model.regimes.values():
         assert sum(regime.transitions.values()) == pytest.approx(1.0)
@@ -115,7 +117,7 @@ def test_bad_regime_tables_rejected(tmp_path, change, message):
             "regimes": [{"name": "bull", "label": "Bull", "emoji": "b", "drift": 0.001,
                          "vol_scale": 1.0, "next": {"bull": 1.0}}]}
     data.update(change)
-    path = tmp_path / "regimes.json"
-    path.write_text(json.dumps(data))
+    path = tmp_path / "reference.db"
+    write_reference(path, {"regimes": data})
     with pytest.raises(DataFileError, match=message):
         load_regimes(path)

@@ -5,16 +5,15 @@ from pathlib import Path
 # Paths are built from this file's location so the game runs from any working directory.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-UNIVERSE_PATH = DATA_DIR / "universe.json"
-EVENTS_PATH = DATA_DIR / "events.json"
-REGIMES_PATH = DATA_DIR / "regimes.json"
-CHALLENGES_PATH = DATA_DIR / "challenges.json"
-GLOSSARY_PATH = DATA_DIR / "glossary.json"
-QUIZ_PATH = DATA_DIR / "quiz.json"
 
-# Agent mode (X-06): one command per call, game kept in a JSON file
-AGENT_GAME_PATH = PROJECT_ROOT / "saves" / "agent.json"
-AGENT_GAME_VERSION = 1
+# SQLite (D-46): the committed reference data and the player's own games
+REFERENCE_DB_PATH = DATA_DIR / "reference.db"
+PLAYER_DB_PATH = PROJECT_ROOT / "saves" / "player.db"
+DB_VERSION = 1                # stored in the player database; a different number means "start fresh"
+AGENT_SLOT = "agent"          # which game agent mode continues (--game NAME)
+WEB_SLOT = "web"              # the game the web app autosaves and resumes
+
+# Agent mode (X-06): one command per call, game kept in the player database
 AGENT_WIDTH = 100             # fixed width so agents always see the same table layout
 
 # Web app (Phase 5a, D-25)
@@ -151,7 +150,6 @@ BEAT_MARGIN = 0.01            # "beating the market" needs at least 1 percentage
 NEWS_MOVERS_SHOWN = 4         # a NEWS line lists at most this many of the stocks it hit
 
 # Headline Lab (E-05) — Laya runs locally, so no API key is needed (D-21)
-SENTIMENT_CACHE_PATH = DATA_DIR / "sentiment_cache.json"
 MODEL_DIR = PROJECT_ROOT / "models" / "laya"   # downloaded by tools/download_model.py (D-21)
 NEUTRAL_BAND = 0.60               # AI probability below this → shown dimmed as "unsure" (D-22)
 MAX_HEADLINE_LENGTH = 200

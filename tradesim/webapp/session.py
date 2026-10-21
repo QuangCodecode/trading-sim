@@ -7,12 +7,15 @@ the game with a snapshot taken just before and queue a Notice for every change:
 trades, coach tips, breaking news, margin calls, the closing bell and badges.
 """
 
+from pathlib import Path
+
 from tradesim import config
 from tradesim.ai.sentiment import SentimentClassifier
-from tradesim.cli import app
+from tradesim.cli import app, savegame
 from tradesim.education import achievements, coach
 from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine import intraday
+from tradesim.engine.errors import TradeSimError
 from tradesim.engine.game import Game
 from tradesim.loader import load_events
 
@@ -55,22 +58,46 @@ class WebSession:
     """The game shown in the browser, the AI helpers and the queue of notices."""
 
     def __init__(self, seed: int | None = None, days: int = config.GAME_DAYS,
-                 ai: SentimentClassifier | None = None, robo: RoboAnalyst | None = None) -> None:
-        """Start a game; tests pass a fake `ai` so the model is never loaded."""
+                 ai: SentimentClassifier | None = None, robo: RoboAnalyst | None = None,
+                 db_path: Path | None = None) -> None:
+        """Start (or resume) a game; tests pass a fake `ai` so the model is never loaded.
+
+        With a `db_path` every command is saved there; None keeps the game in memory only.
+        """
         self.ai = ai or SentimentClassifier()
         self.robo = robo or app.robo_model()
-        self.game = app.new_game(seed, days)
-        self.words = load_events(config.EVENTS_PATH, self.game.market.stocks)   # keyword lists
+        self.db_path = db_path
+        self.game_id: int | None = None
+        self.game = self.open_game(seed, days)
+        self.words = load_events(self.game.market.stocks)   # keyword lists
         self.notices: list[Notice] = []
         self.last_output: list = []
         self._next_id = 1
         self.news_seen: set[int] = set()
         self._forget_old_news()
 
+    def open_game(self, seed: int | None, days: int) -> Game:
+        """Resume the last unfinished saved game, unless a seed was asked for; else start a new one."""
+        if self.db_path is not None and seed is None:
+            try:
+                loaded = savegame.load_game(self.db_path, config.WEB_SLOT)
+            except TradeSimError as error:
+                print(f"{error} Starting a new game.", flush=True)
+                loaded = None
+            if loaded is not None and not loaded[0].is_over():
+                game, self.game_id = loaded
+                return game
+        game = app.new_game(seed, days)
+        if self.db_path is not None:
+            self.game_id = savegame.start_game(self.db_path, config.WEB_SLOT, game)
+        return game
+
     def run(self, line: str) -> list:
-        """Run one command line and queue notices for what changed. Raises TradeSimError."""
+        """Run one command line, save it and queue notices for what changed. Raises TradeSimError."""
         before = Snapshot(self.game)
-        self.last_output = app.execute(self.game, line, self.ai)
+        self.last_output = app.execute(self.game, line, self.ai, self.db_path)
+        if self.db_path is not None:
+            self.game_id = savegame.save_after(self.db_path, config.WEB_SLOT, self.game, self.game_id, line)
         if self.game.portfolio is not before.portfolio:      # `new` or `challenge` restarted
             self._forget_old_news()
             name = self.game.challenge or f"seed {self.game.market.seed}"

@@ -81,7 +81,7 @@ def test_daily_change_pct(tiny_market):
 
 def test_events_use_separate_rng_so_prices_match_until_first_event(universe):
     stocks, etfs = universe
-    templates = load_events(config.EVENTS_PATH, stocks).templates
+    templates = load_events(stocks).templates
     plain = Market(stocks, etfs, 42, 60)
     with_news = Market(stocks, etfs, 42, 60, templates)
     first = min(day for day in range(1, 61) if with_news.events_on(day))
@@ -92,7 +92,7 @@ def test_events_use_separate_rng_so_prices_match_until_first_event(universe):
 
 def test_events_are_deterministic_and_roughly_25_percent_of_days(universe):
     stocks, etfs = universe
-    templates = load_events(config.EVENTS_PATH, stocks).templates
+    templates = load_events(stocks).templates
     a = Market(stocks, etfs, 7, 1000, templates)
     b = Market(stocks, etfs, 7, 1000, templates)
     days_a = [d for d in range(1, 1001) if a.events_on(d)]
@@ -118,8 +118,8 @@ from tradesim.loader import load_regimes
 
 @pytest.fixture
 def regimes():
-    """The real market moods from data/regimes.json."""
-    return load_regimes(config.REGIMES_PATH)
+    """The real market moods from data/reference.db."""
+    return load_regimes()
 
 
 def test_regime_path_is_deterministic_and_covers_every_day(regimes):
@@ -187,7 +187,7 @@ def test_normal_regime_is_the_default(universe):
 
 def test_the_same_headline_never_repeats_within_the_gap(universe):
     stocks, etfs = universe
-    templates = load_events(config.EVENTS_PATH, stocks).templates
+    templates = load_events(stocks).templates
     market = Market(stocks, etfs, 11, 400, templates)
     seen = {}
     for day in range(1, 401):

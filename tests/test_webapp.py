@@ -4,11 +4,13 @@ import json
 import threading
 import urllib.error
 import urllib.request
+from contextlib import closing
 from http.server import HTTPServer
 
 import pytest
 
 from tradesim import config
+from tradesim.database import open_player
 from tradesim.engine.errors import TradeSimError
 from tradesim.webapp import api, server
 from tradesim.webapp.session import WebSession
@@ -188,3 +190,68 @@ def test_server_rejects_bad_requests_politely(base_url, path, body, raw):
 def test_server_hides_everything_outside_static(base_url):
     for path in ("/api/nope", "/../config.py", "/%2e%2e/server.py", "/js/../../server.py"):
         assert call(base_url + path)[0] == 404
+
+
+# ---------------------------------------------------------------- saved games (D-46)
+
+def saved_session(db, seed=None, days=60):
+    return WebSession(seed, days, ai=FakeAI(), db_path=db)
+
+
+def test_game_is_resumed_after_a_restart(tmp_path):
+    db = tmp_path / "player.db"
+    first = saved_session(db, 42)
+    for line in ["buy NVDA 5", "tick 10", "next 2", "tick 3"]:
+        first.run(line)
+    again = saved_session(db)                                      # no seed: continue
+    assert (again.game.market.seed, again.game.day, again.game.tick) == (42, first.game.day, 3)
+    assert again.game.portfolio.qty_held("NVDA") == 5
+    assert again.game.equity() == pytest.approx(first.game.equity())
+    assert again.notices == []                                     # no flood of old toasts
+
+
+def test_a_seed_starts_a_fresh_game_and_keeps_the_old_one(tmp_path):
+    db = tmp_path / "player.db"
+    saved_session(db, 42).run("buy NVDA 5")
+    fresh = saved_session(db, 7)
+    assert fresh.game.market.seed == 7 and not fresh.game.portfolio.trades
+    assert [g["seed"] for g in api.games(fresh)["games"]] == [7, 42]
+    assert saved_session(db).game.market.seed == 7                 # the new one is what resumes now
+
+
+def test_a_finished_game_is_not_resumed(tmp_path):
+    db = tmp_path / "player.db"
+    saved_session(db, 42, 5).run("next 5")
+    assert saved_session(db).game.day == 0
+
+
+def test_new_and_challenge_replace_the_saved_game(tmp_path):
+    db = tmp_path / "player.db"
+    first = saved_session(db, 42)
+    first.run("buy NVDA 5")
+    first.run("new 9")
+    first.run("challenge crash")
+    games = api.games(first)["games"]
+    assert [g["challenge"] for g in games] == ["crash", None, None]
+    assert [g["slot"] for g in games] == ["web", None, None]
+    assert saved_session(db).game.challenge.id == "crash"
+
+
+def test_a_damaged_save_starts_a_new_game_with_a_message(tmp_path, capsys):
+    db = tmp_path / "player.db"
+    saved_session(db, 42)
+    with closing(open_player(db)) as raw, raw:
+        raw.execute("INSERT INTO commands VALUES (1, 0, 'sell NVDA 5')")   # nothing to sell
+    again = saved_session(db)
+    assert "damaged" in capsys.readouterr().out and again.game.day == 0
+    assert [g["slot"] for g in api.games(again)["games"]] == ["web", None]   # the bad one is archived
+
+
+def test_without_a_database_nothing_is_saved(session):
+    session.run("buy NVDA 2")
+    assert session.game_id is None and api.games(session) == {"games": []}
+
+
+def test_games_route(base_url):
+    status, body = call(base_url + "/api/games")
+    assert status == 200 and json.loads(body) == {"games": []}

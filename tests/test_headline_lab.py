@@ -11,7 +11,7 @@ from tradesim.loader import load_events
 @pytest.fixture
 def words(universe):
     stocks, _etfs = universe
-    catalogue = load_events(config.EVENTS_PATH, stocks)
+    catalogue = load_events(stocks)
     return catalogue.positive_words, catalogue.negative_words
 
 

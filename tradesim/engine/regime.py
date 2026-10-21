@@ -3,7 +3,7 @@
 Real markets don't wander randomly every day: they spend weeks or months in a bull run,
 a sideways chop or a bear market, and once in a while they crash. We copy that with a
 Markov chain: each day the market keeps its mood with a high probability or switches to
-another one, using the transition table in data/regimes.json (finance model §3.2).
+another one, using the transition table in data/reference.db (finance model §3.2).
 """
 
 import random

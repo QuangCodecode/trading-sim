@@ -7,7 +7,7 @@ from tradesim.cli import app
 from tradesim.education import academy, achievements, challenges
 from tradesim.engine import analytics
 from tradesim.engine.errors import TradeSimError
-from tradesim.loader import load_challenges, load_list
+from tradesim.loader import load_challenges, load_glossary, load_quiz
 
 
 def test_badges_are_announced_once(game):
@@ -26,7 +26,7 @@ def test_command_badges_come_from_commands_used(game):
 
 @pytest.fixture
 def catalogue():
-    return load_challenges(config.CHALLENGES_PATH)
+    return load_challenges()
 
 
 @pytest.mark.parametrize("challenge_id", ["bull", "crash", "bear", "tech", "sideways", "index", "rollercoaster",
@@ -75,7 +75,7 @@ def test_new_command_starts_fresh():
 
 
 def test_glossary_lookup_forgives_case_typos_and_partial_words():
-    terms = load_list(config.GLOSSARY_PATH, "terms")
+    terms = load_glossary()
     assert academy.find_term(terms, "ETF")["term"] == "ETF"
     assert academy.find_term(terms, "bear")["term"] == "Bear market"
     assert academy.find_term(terms, "volatilty")["term"] == "Volatility"
@@ -84,7 +84,7 @@ def test_glossary_lookup_forgives_case_typos_and_partial_words():
 
 
 def test_quiz_marks_answers_and_rejects_bad_letters():
-    questions = load_list(config.QUIZ_PATH, "questions")
+    questions = load_quiz()
     question = questions[0]
     right = academy.LETTERS[question["answer"]]
     assert academy.mark(question, right.lower())
@@ -94,13 +94,13 @@ def test_quiz_marks_answers_and_rejects_bad_letters():
 
 
 def test_quiz_answers_are_not_all_the_same_letter():
-    answers = {q["answer"] for q in load_list(config.QUIZ_PATH, "questions")}
+    answers = {q["answer"] for q in load_quiz()}
     assert len(answers) == 4
 
 
 def test_quiz_command_counts_the_score():
     game = app.new_game(1, 60)
-    question = load_list(config.QUIZ_PATH, "questions")[0]
+    question = load_quiz()[0]
     app.execute(game, f"quiz {academy.LETTERS[question['answer']]}")
     assert game.quiz_results == [True]
 

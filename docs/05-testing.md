@@ -20,7 +20,7 @@ run is a strong demo/tutor talking point. Use **pytest**.
 
 ```python
 @pytest.fixture
-def universe():            # the real data/universe.json loaded via loader
+def universe():            # the real data/reference.db loaded via loader
 @pytest.fixture
 def tiny_market():         # Market.from_prices with 3 stocks + 1 ETF, 6 days of known prices
 @pytest.fixture
@@ -39,7 +39,7 @@ def game(tiny_market, portfolio):
 - One stock at `MIN_PRICE` floor → ETF still finite and positive.
 
 ### `test_loader.py`
-- Real `universe.json` loads; 6 stocks, MIX6 weights sum to 1.
+- The real `reference.db` loads: 100 stocks in 10 sectors, MIX6 weights sum to 1. Bad data is built with `write_reference` into a `tmp_path` database.
 - Weights summing to 0.99 → `DataFileError`; unknown symbol in weights → `DataFileError`;
   duplicate symbol → `DataFileError`; missing file → `DataFileError` with path in message.
 - (X-04) ETF cycle A→B→A → `DataFileError`.
@@ -124,10 +124,18 @@ def game(tiny_market, portfolio):
 - A corrupt cache file is treated as empty, and the next save rewrites it.
 - **Determinism guard:** take a snapshot of every `Market` price, run `headline_lab.score` over all events, and assert the prices are unchanged (D-20).
 
+### `test_database.py` / `test_savegame.py` (D-46, `tmp_path`)
+- Every reference section round-trips through `write_reference` → `read_section` with row, weight and transition order kept (they feed the seeded RNG).
+- The reference connection is read-only; missing/garbage files → `DataFileError`; another `user_version` → "delete it"; foreign keys on.
+- A saved game replays to the same equity; the summary row and badges follow the game; a finished challenge records pass/fail;
+  starting again in a slot archives the old game; a command that no longer works → "damaged".
+- Web: resume after a restart (day, tick, holdings), `--seed` starts fresh and keeps the old game, a finished game is not resumed,
+  `new`/`challenge` archive, a damaged save starts a new game with a message, `db_path=None` saves nothing, `/api/games`.
+
 ### `test_agent.py` (X-06, `tmp_path`, never loads Laya)
-- The first call creates the file with the seed and days. Only successful `buy`/`sell`/`next` lines are recorded.
+- The first call saves the game with its seed and days. Only successful state-changing lines are recorded.
 - State carries over between calls, and a 5-command replay gives the same equity as one live session.
-- Bad JSON, wrong version, wrong types, `[]` and a tampered command → exit 1, "damaged", file unchanged.
+- A garbage file, another version, a tampered command and an unknown challenge → exit 1, "damaged".
 - A different `--seed` is refused. Output has no ANSI codes and starts with the status line.
 - `execute` raises while `run_command` doesn't. `main.parse_args` without command words → REPL.
 
@@ -190,7 +198,7 @@ pytest -q --cov=tradesim --cov-report=term-missing   # coverage (target ≥ 85% 
 | 9 | `whatif` (Phase 4) | "Your trades" matches final equity |
 | 10 | Ctrl+C mid-game | graceful exit, no traceback |
 | 11 | Run twice with `--seed 42` and same commands | identical output |
-| 12 | `rm -f saves/agent.json; uv run main.py --seed 42 market; uv run main.py buy nvda 20; uv run main.py next 5; uv run main.py portfolio` | NVDA position on day 5, each exit code 0 |
+| 12 | `rm -f saves/player.db; uv run main.py --seed 42 market; uv run main.py buy nvda 20; uv run main.py next 5; uv run main.py portfolio` | NVDA position on day 5, each exit code 0 |
 | 13 | `uv run main.py buy XYZ 1; echo $?` | one `✗` line, `1` |
 | 14 | `uv run main.py --web --seed 42`: Open the market, double-click NVDA → buy 10, Trade page (1D and All), Leverage 2× → buy MKT100 max, Skip 20 days, every page, Terminal `buy NOPE 1` | live board, toasts, closing bell; red toast/line for the bad command; no traceback in the server terminal |
 | 15 | Same, at 15× speed for a whole day, then **To close ⏭** and **Skip to the end** | the clock never stalls; final report dialog |

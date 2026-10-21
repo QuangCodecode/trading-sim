@@ -1,4 +1,4 @@
-"""Label every events.json headline with Laya once and save data/sentiment_cache.json.
+"""Label every news-template headline with Laya once and save the answers into data/reference.db.
 
 Run before committing or demoing: python3 tools/warm_cache.py
 Then the game shows Laya's answers instantly, even on a machine without the model.
@@ -16,9 +16,9 @@ from tradesim.loader import load_events, load_universe
 
 def main() -> None:
     """Classify each template headline (cached ones are skipped) and print the results."""
-    stocks, _etfs = load_universe(config.UNIVERSE_PATH)
-    catalogue = load_events(config.EVENTS_PATH, stocks)
-    classifier = SentimentClassifier()
+    stocks, _etfs = load_universe()
+    catalogue = load_events(stocks)
+    classifier = SentimentClassifier(cache_path=config.REFERENCE_DB_PATH, seed_path=None)
     for template in catalogue.templates:
         verdict = classifier.classify(template["headline"])
         if verdict is None:
@@ -26,7 +26,7 @@ def main() -> None:
         truth = "positive" if template["shock_min"] > 0 else "negative"
         mark = "✔" if verdict.label == truth else "✗"
         print(f"{mark} {template['headline']:50} {verdict}")
-    print(f"Saved {len(classifier.cache)} answers to {config.SENTIMENT_CACHE_PATH}")
+    print(f"Saved {len(classifier.cache)} answers to {config.REFERENCE_DB_PATH}")
 
 
 if __name__ == "__main__":

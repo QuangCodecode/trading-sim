@@ -2,7 +2,6 @@
 
 import pytest
 
-from tradesim import config
 from tradesim.engine.etf import ETF
 from tradesim.engine.game import Game
 from tradesim.engine.market import Market
@@ -13,8 +12,8 @@ from tradesim.loader import load_universe
 
 @pytest.fixture
 def universe():
-    """(stocks, etfs) loaded from the real data/universe.json."""
-    return load_universe(config.UNIVERSE_PATH)
+    """(stocks, etfs) loaded from the real data/reference.db."""
+    return load_universe()
 
 
 @pytest.fixture
