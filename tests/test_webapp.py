@@ -150,9 +150,9 @@ def base_url(session):
     httpd.server_close()
 
 
-def call(url, body=None, raw=None):
+def call(url, body=None, raw=None, content_type="application/json"):
     data = raw if raw is not None else (json.dumps(body).encode() if body is not None else None)
-    request = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+    request = urllib.request.Request(url, data=data, headers={"Content-Type": content_type})
     try:
         with urllib.request.urlopen(request) as response:
             return response.status, response.read()
@@ -185,6 +185,17 @@ def test_server_runs_commands_and_ticks(base_url, session):
 def test_server_rejects_bad_requests_politely(base_url, path, body, raw):
     status, reply = call(base_url + path, body, raw)
     assert status == 400 and json.loads(reply)["error"]
+
+
+def test_server_refuses_commands_that_are_not_json(base_url, session):
+    """Another website can POST text/plain to localhost without asking, so that type is refused."""
+    status, _ = call(base_url + "/api/command", {"line": "buy NVDA 2"}, content_type="text/plain")
+    assert status == 400 and session.game.portfolio.trades == []
+
+
+def test_a_bad_since_is_refused_before_the_command_runs(base_url, session):
+    status, _ = call(base_url + "/api/command", {"line": "buy NVDA 2", "since": "x"})
+    assert status == 400 and session.game.portfolio.trades == []
 
 
 def test_server_hides_everything_outside_static(base_url):

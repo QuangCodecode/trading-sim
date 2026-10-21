@@ -59,6 +59,8 @@ def test_wipeout_sells_everything_and_leaves_a_debt(account):
     account.buy("X", 199, 100.0, 0, 9_999.0)
     margin.liquidate(account, {"X": 40.0}, day=3, tick=0)
     assert account.positions == {} and account.cash == pytest.approx(-9_901 + 7_960 - 1)
+    # Bug 22: the leftover debt with nothing to sell is not a new margin call every tick
+    assert not margin.is_margin_call(account, {"X": 40.0})
 
 
 def test_interest_is_charged_on_the_loan_only(account, portfolio):

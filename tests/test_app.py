@@ -15,7 +15,8 @@ BAD_OR_ODD_LINES = [
     "", "   ", "buy", "buy XYZ 1", "buy JUMP 999999", "buy JUMP ten", "buy JUMP 1.5",
     "sell JUMP all", "sell JUMP 3", "next 0", "next -2", "next abc", "lab", "lab FUND",
     "lab JUMP CALM", "lab NOPE", "chart", "chart NOPE", "quote", "etf JUMP", "etf NOPE",
-    "help nope", "hl", "x" * 500, "ünïcødé 🚀", "quit", "news", "news 0", "news 99", "news 3", "next 999", "buy JUMP 1",
+    "help nope", "hl", "x" * 500, "market [/x]", 'hl "[/x] beats"', "quote [/b]", "buy JUMP ²",
+    "next ³", "new 99999999999999999999", "ünïcødé 🚀", "quit", "news", "news 0", "news 99", "news 3", "next 999", "buy JUMP 1",
 ]
 
 
@@ -23,6 +24,15 @@ BAD_OR_ODD_LINES = [
 def test_any_line_returns_output_without_raising(game, line):
     output = app.run_command(game, line)
     assert isinstance(output, list)
+    console = Console(file=io.StringIO(), width=100)
+    for renderable in output:              # Bug 23: "[/x]" in the text crashed rich when printed
+        console.print(renderable)
+
+
+def test_new_refuses_a_seed_too_big_to_save(game):
+    """Bug 25: SQLite can't store it, so the save failed after the game had already changed."""
+    with pytest.raises(TradeSimError, match="seed must be below"):
+        app.execute(game, "new 99999999999999999999")
 
 
 def test_buy_max_spends_almost_all_cash(game):

@@ -68,8 +68,11 @@ def fall_to_call(portfolio: Portfolio, prices: dict[str, float]) -> float:
 
 
 def is_margin_call(portfolio: Portfolio, prices: dict[str, float]) -> bool:
-    """True if you owe the broker and your own money has fallen below maintenance."""
-    if portfolio.loan() == 0:
+    """True if you owe the broker and your own money has fallen below maintenance.
+
+    After a wipeout nothing is left to sell, so the leftover debt is not a margin call.
+    """
+    if portfolio.loan() == 0 or not portfolio.positions:
         return False
     holdings = portfolio.market_value(prices)
     return portfolio.equity(prices) < maintenance(portfolio.max_leverage) * holdings

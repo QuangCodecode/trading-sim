@@ -545,7 +545,7 @@ def own_headline_view(text: str, keywords: Verdict, ai: Verdict | None) -> Panel
         "Laya (AI)        ", ai_line, "\n\n",
         ("The counter only adds up listed words. Laya reads the whole sentence — "
          "watch for 'not', 'less than feared', 'fail to'.", "italic"))
-    return Panel(body, title=f'"{text}"', expand=False)
+    return Panel(body, title=Text(f'"{text}"'), expand=False)   # Text: the player's "[" isn't markup
 
 
 def help_view(commands: dict[str, tuple[str, str]], topic: str | None) -> Table | str:

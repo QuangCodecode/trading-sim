@@ -120,6 +120,11 @@ def test_execute_raises_but_run_command_does_not(game):
     assert isinstance(CommandError("x"), TradeSimError)
 
 
+def test_a_seed_too_big_to_save_is_refused():
+    with pytest.raises(SystemExit):
+        main.parse_args(["--seed", "99999999999999999999"])
+
+
 def test_no_command_words_means_the_repl():
     assert main.parse_args(["--seed", "42"]).command == []
     args = main.parse_args(["--seed", "42", "buy", "NVDA", "20"])

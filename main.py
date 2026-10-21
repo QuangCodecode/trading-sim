@@ -31,6 +31,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     args = parser.parse_args(argv)
     if args.days < 1:
         parser.error("--days must be at least 1")
+    if args.seed is not None and not 0 <= args.seed < app.MAX_SEED:
+        parser.error(f"--seed must be from 0 to {app.MAX_SEED - 1}")
     return args
 
 

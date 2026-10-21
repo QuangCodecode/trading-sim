@@ -39,7 +39,7 @@ The same commands and screens are available in two more front ends:
 | `challenge [NAME]` | `ch` | 8 | List the 9 challenges, or start one (restarts the game in place) |
 | `learn [TERM]` | `glossary` | 8 | Glossary list, or one term explained (typos and partial words OK) |
 | `quiz [A-D]` | | 8 | Show the next question / answer it; 5 right = Scholar badge |
-| `new [SEED]` | | 8 | Start a new free-play game |
+| `new [SEED]` | | 8 | Start a new free-play game (seed 0–999,999, like `--seed`; a bigger one can't be saved) |
 | `headlines` | `hl` | 5 | Headline Lab: every headline so far, keyword vs Laya (AI) verdict vs real move, plus the hit score |
 | `hl "TEXT"` | | 5 | Classify your own headline with both methods (no truth column — it never happened) |
 | `scenario list` / `scenario start NAME` | | X-01 | Challenge mode |

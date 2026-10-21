@@ -100,7 +100,8 @@ def parse_quantity(word: str, keyword: str) -> int | str:
     """A positive whole number, or the keyword ("max"/"all") itself."""
     if word.lower() == keyword:
         return keyword
-    if not word.isdigit() or int(word) == 0:
+    # isdecimal, not isdigit: "²".isdigit() is True but int("²") fails
+    if not word.isdecimal() or int(word) == 0:
         raise CommandError("Quantity must be a whole number greater than 0.")
     return int(word)
 
@@ -124,7 +125,7 @@ def optional_number(name: str, args: list[str]) -> list:
     """next [N] / news [DAY]: zero or one whole number."""
     if len(args) > 1:
         raise usage_error(name)
-    if args and not args[0].isdigit():
+    if args and not args[0].isdecimal():
         raise CommandError(f"{args[0]} is not a whole number. {usage_error(name)}")
     return [int(word) for word in args]
 

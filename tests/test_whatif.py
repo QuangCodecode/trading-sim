@@ -19,8 +19,10 @@ def played():
 
 def test_your_trades_replay_matches_the_real_game(played):
     """Replay fidelity: if this fails, the replay engine has a bug (docs/04 E-04)."""
-    mine = whatif.replay(played.market, whatif.YOURS, "", strategies.copy_trades(played.portfolio.trades),
-                         played.day)
+    trades = played.portfolio.trades
+    def copy_trades(day, market, portfolio):
+        return [(t.side, t.symbol, t.qty) for t in trades if t.day == day]
+    mine = whatif.replay(played.market, whatif.YOURS, "", copy_trades, played.day)
     assert mine.final == pytest.approx(played.equity())
     assert mine.trades == len(played.portfolio.trades)
 

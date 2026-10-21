@@ -173,3 +173,44 @@ Cause:    "Your trades" was a *replay* of the trade log at each day's close in a
 Fix:      `whatif.your_result` uses the game's real equity curve (ticks, borrowing, interest and
           margin calls included); only the preset strategies are replayed.
 Test:     test_your_trades_row_is_what_really_happened_with_leverage_and_ticks
+
+## Bug 22 — A wiped-out margin account got an empty "Margin call!" every tick
+Symptom:  after a gap down sold everything and left a debt, every tick added `[]` to `game.margin_calls`
+          and the web app showed "…so it sold ." (nothing after it) again and again.
+Cause:    `is_margin_call` only checked loan > 0 and equity < maintenance × holdings: with no holdings,
+          a negative equity is always "below" 0.
+Fix:      no holdings → no margin call (`margin.is_margin_call`).
+Test:     test_wipeout_sells_everything_and_leaves_a_debt.
+
+## Bug 23 — Typing "[/x]" crashed the terminal game
+Symptom:  `market [/x]` and `hl "[/x] beats"` → `rich.errors.MarkupError` traceback.
+Cause:    rich reads `[...]` as style tags; the error message and the headline panel title included the
+          player's text unescaped.
+Fix:      `escape(str(error))` in `run_command`; the panel title is a `Text`, which is never parsed as markup.
+Test:     test_any_line_returns_output_without_raising now prints every output too.
+
+## Bug 24 — `buy NVDA ²` crashed with ValueError
+Symptom:  agent mode traceback: `invalid literal for int() with base 10: '²'`.
+Cause:    `"²".isdigit()` is True, but `int("²")` fails.
+Fix:      `str.isdecimal()` in `parser.parse_quantity` and `optional_number`.
+Test:     test_bad_buy_sell_shapes_rejected / test_bad_next_and_extra_args_rejected (`²`, `³`).
+
+## Bug 25 — `new 99999999999999999999` broke the save
+Symptom:  `OverflowError: Python int too large to convert to SQLite INTEGER`. In the web app the new game
+          was already in memory, so later commands were saved under the old game, which then replayed wrong.
+Cause:    no upper limit on a typed seed; SQLite integers stop at 2⁶³ − 1.
+Fix:      `new` and `--seed` accept 0 … MAX_SEED − 1 (D-48).
+Test:     test_new_refuses_a_seed_too_big_to_save, test_a_seed_too_big_to_save_is_refused.
+
+## Bug 26 — Badges for looking vanished after a restart
+Symptom:  "Scientist" (lab) and "Robo Curious" showed as locked after the web server restarted, and were
+          announced again the next time.
+Cause:    a reload replays only state commands (buy, next, tick…), so `commands_used` never saw `lab`.
+Fix:      `savegame.load_game` adds the badges stored in the `badges` table.
+Test:     test_badges_for_looking_survive_a_reload.
+
+## Bug 27 — A bad `since` failed the reply after the command had already run
+Symptom:  POST `{"line": "buy NVDA 1", "since": "x"}` → 400, but the trade was made and saved.
+Cause:    `int(body["since"])` was read after `session.run`.
+Fix:      `Handler.run_post` reads `since` first. (Same change: POST bodies must be `application/json`, D-48.)
+Test:     test_a_bad_since_is_refused_before_the_command_runs, test_server_refuses_commands_that_are_not_json.

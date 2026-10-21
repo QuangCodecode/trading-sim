@@ -84,3 +84,13 @@ def test_a_command_that_no_longer_works_means_damaged(path):
         db.execute("INSERT INTO commands VALUES (?, 0, 'sell NVDA 5')", (game_id,))   # nothing to sell
     with pytest.raises(TradeSimError, match="damaged"):
         savegame.load_game(path, "web")
+
+
+def test_badges_for_looking_survive_a_reload(path):
+    """Bug 26: `lab` isn't replayed, so its badge vanished and was announced again after a restart."""
+    game = app.new_game(42, 10)
+    game_id = savegame.start_game(path, "web", game)
+    play(game, "next 6", "lab")
+    savegame.record(path, game_id, game, "next 6")
+    loaded, _ = savegame.load_game(path, "web")
+    assert "scientist" in loaded.badges and loaded.badges.count("scientist") == 1

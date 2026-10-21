@@ -16,7 +16,6 @@ from tradesim import config
 from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine.market import Market
 from tradesim.engine.portfolio import Portfolio
-from tradesim.engine.trade import Trade
 
 Order = tuple[str, str, int]
 Strategy = Callable[[int, Market, Portfolio], list[Order]]   # the one shared signature
@@ -110,9 +109,3 @@ def follow_robo(analyst: RoboAnalyst) -> Strategy:
         return []
     return strategy
 
-
-def copy_trades(trades: list[Trade]) -> Strategy:
-    """Make a strategy that repeats the player's own trades on the same days."""
-    def strategy(day: int, market: Market, portfolio: Portfolio) -> list[Order]:
-        return [(t.side, t.symbol, t.qty) for t in trades if t.day == day]
-    return strategy

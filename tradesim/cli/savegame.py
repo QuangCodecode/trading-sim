@@ -38,6 +38,8 @@ def load_game(db_path: Path, slot: str) -> tuple[Game, int] | None:
             return None
         lines = [r["line"] for r in db.execute(
             "SELECT line FROM commands WHERE game_id = ? ORDER BY position", (row["id"],))]
+        badges = [r["badge_id"] for r in db.execute(
+            "SELECT badge_id FROM badges WHERE game_id = ? ORDER BY rowid", (row["id"],))]
     try:
         challenge = load_challenges()[row["challenge"]] if row["challenge"] else None
         game = app.new_game(row["seed"], row["days"], challenge)
@@ -45,6 +47,8 @@ def load_game(db_path: Path, slot: str) -> tuple[Game, int] | None:
             app.execute(game, line)
     except (TradeSimError, KeyError):
         raise damaged(slot)   # a stored command that fails now means the database was edited
+    # Badges for looking (lab, robo, news…) aren't replayed, because only state commands are stored.
+    game.badges += [badge for badge in badges if badge not in game.badges]
     return game, row["id"]
 
 

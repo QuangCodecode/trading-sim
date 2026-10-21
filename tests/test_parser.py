@@ -16,7 +16,8 @@ def test_max_and_all_keywords():
 
 
 @pytest.mark.parametrize("line", ["buy AAPL 10.5", "buy AAPL -1", "buy AAPL 0",
-                                  "buy AAPL ten", "buy AAPL", "sell AAPL max"])
+                                  "buy AAPL ten", "buy AAPL", "sell AAPL max",
+                                  "buy AAPL ²"])        # Bug 24: "²".isdigit() is True
 def test_bad_buy_sell_shapes_rejected(line):
     with pytest.raises(CommandError):
         parse(line)
@@ -37,7 +38,7 @@ def test_aliases():
     assert parse("? buy") == Command("help", ["buy"])
 
 
-@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "portfolio now"])
+@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "portfolio now", "next ³"])
 def test_bad_next_and_extra_args_rejected(line):
     with pytest.raises(CommandError):
         parse(line)

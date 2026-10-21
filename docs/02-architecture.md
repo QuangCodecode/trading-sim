@@ -14,10 +14,10 @@
 | Maths | `statistics` (`mean`, `stdev`), `math` | Standard library — evidences LO11 |
 | Data | SQLite via `sqlite3` (D-46): `data/reference.db` (committed, read-only) + `saves/player.db` (git-ignored) | Stock universe, events, moods, glossary, quiz, challenges, AI labels; saved games and progress. Separates data from code; one small file each |
 | CLI args | `argparse` | `--seed`, `--days`, `--game NAME`, `--db PATH`, plus optional command words for agent mode (D-26) |
-| Tests | `pytest` (+ `pytest-cov` optional) | Readable asserts, `approx` for floats |
+| Tests | `pytest` | Readable asserts, `approx` for floats |
 | Packaging | none — plain folder with `requirements.txt` | Keep it simple |
 
-`requirements.txt`: `rich>=13`, `laya>=0.4` (pulls in torch + transformers, D-21) · `requirements-dev.txt`: `pytest>=8`, `pytest-cov>=5`, `websockets>=17.2` (only for `tools/screenshot.py`)
+`requirements.txt`: `rich>=13`, `laya>=0.4` (pulls in torch + transformers, D-21) · `requirements-dev.txt`: `pytest>=8`, `websockets>=17.2` (only for `tools/screenshot.py`)
 
 ## 2.2 Folder structure
 
@@ -111,6 +111,7 @@ engine data (`webapp/api.py`) to draw the page (D-32, D-37).
  every 1/speed s ── POST /api/tick {1} ──► session.run("tick 1") ──► cli.app.execute ──► game.step()
                  ◄── {clock, account, quotes, notices…} ── api.state(session) ◄── reads Game/Market
  double-click row ─ POST /api/command {"buy NVDA 10"} ─► same path; TradeSimError → 400 {"error"}
+                    (POST bodies must be Content-Type: application/json, else 400: see D-48)
  chart / labs ───── GET /api/chart?symbol=NVDA&span=1D ─► api.chart() (never past the current tick)
 ```
 

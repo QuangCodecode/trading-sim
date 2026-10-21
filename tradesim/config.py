@@ -18,13 +18,6 @@ AGENT_WIDTH = 100             # fixed width so agents always see the same table 
 
 # Web app (Phase 5a, D-25)
 WEB_WIDTH = 100               # characters per line when rich screens are drawn as HTML
-WEB_MAX_DAYS = 250            # longest game the New game form allows
-WEB_MAX_TOASTS = 6            # toasts shown after one click (the rest stay in the activity feed)
-WEB_ACTIVITY_SHOWN = 8        # activity-feed lines on the dashboard
-WEB_NEWS_SHOWN = 4            # headlines on the dashboard's news card
-WEB_CARD_HEIGHT = 168          # px, so the five headline cards line up
-WEB_BADGE_HEIGHT = 150         # px, so the badge wall is a tidy grid
-WEB_TEST_MARKETS = 10         # unseen markets used to score a model trained in the web lab
 
 # Web app v2 (D-37): a real web server + hand-written HTML/CSS/JS front end
 WEB_HOST = "127.0.0.1"        # localhost only: the game is for the player on this computer

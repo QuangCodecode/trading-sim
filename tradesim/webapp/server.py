@@ -108,7 +108,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "The request body must be a small JSON object."}, 400)
             return
         # The reply also carries the new state, so the page updates without a second request.
-        self.answer(lambda: POST_ROUTES[path](self.session, body) | api.state(self.session, int(body.get("since", 0))))
+        self.answer(lambda: self.run_post(path, body))
+
+    def run_post(self, path: str, body: dict) -> dict:
+        """Check `since` first, so a bad one can't fail the reply after the command already ran."""
+        since = int(body.get("since", 0))
+        return POST_ROUTES[path](self.session, body) | api.state(self.session, since)
 
     def answer(self, make_reply) -> None:
         """Send `make_reply()` as JSON: rule breaks become a friendly 400, crashes a 500."""
@@ -123,7 +128,13 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "Something went wrong on the server (see the terminal)."}, 500)
 
     def read_body(self) -> dict | None:
-        """The request's JSON object, or None if it is missing, too big or not an object."""
+        """The request's JSON object, or None if it is missing, too big or not an object.
+
+        Only `application/json` is accepted: another website can't send that type to us without
+        the browser asking first (and we never say yes), so it can't run commands in your game.
+        """
+        if not (self.headers.get("Content-Type") or "").startswith("application/json"):
+            return None
         length = int(self.headers.get("Content-Length") or 0)
         if not 0 < length <= config.WEB_MAX_BODY:
             return None

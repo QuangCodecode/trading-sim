@@ -3,6 +3,7 @@
 import random
 
 from rich.console import Console
+from rich.markup import escape
 
 import difflib
 from pathlib import Path
@@ -295,6 +296,8 @@ def restart(game: Game, fresh: Game) -> None:
 
 
 def do_new(game: Game, args: list) -> object:
+    if args and args[0] >= MAX_SEED:      # a huge seed can't be saved in SQLite
+        raise TradeSimError(f"The seed must be below {MAX_SEED:,} (e.g. new 42).")
     restart(game, new_game(args[0] if args else None, config.GAME_DAYS))
     return [views.banner(game), views.quick_start()]
 
@@ -367,7 +370,8 @@ def run_command(game: Game, line: str, ai: SentimentClassifier | None = None) ->
     try:
         return execute(game, line, ai)
     except TradeSimError as error:
-        return [f"[red]✗ {error}[/red]"]
+        # escape: the message may quote the player's text, and "[/x]" would be read as a style tag
+        return [f"[red]✗ {escape(str(error))}[/red]"]
 
 
 def is_command(line: str, name: str) -> bool:
