@@ -1,5 +1,13 @@
 # 04 — Features and CLI specification
 
+> **D-50 (2026-10-24): the terminal screens in this spec were removed.** What remains of the "CLI" is the **command layer**:
+> `cli/parser.py` + `cli/app.py` accept `buy SYM QTY`, `sell SYM QTY|all`, `next [N]`, `tick [N]`, `leverage N`,
+> `new [SEED]`, `challenge NAME`, `quiz A-D`, `hl "TEXT"`, `lab mc [STOCK]` and the no-output visit commands
+> `news`, `robo`, `whatif`, `levlab`, `lab`. The web page sends them to `POST /api/command`; the reply may carry a
+> `result` (quiz marking, Monte Carlo table, headline test). Validation rules and edge cases below still hold for those
+> commands; the screens (`market`, `quote`, `chart`, `portfolio`, `report`, `help`, …) are now web pages drawn from `/api/*`.
+> Agent mode (§4.7) no longer exists.
+
 Style: a command prompt (`> `), not numbered menus. Every screen is built in
 `cli/views.py` with `rich` (Tables, Panels, colour). Mock-ups below are plain text; the
 real output adds colour: **green** gains, **red** losses, **cyan** symbols, **yellow** tips.

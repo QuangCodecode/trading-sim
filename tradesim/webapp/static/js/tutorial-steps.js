@@ -63,9 +63,9 @@ const SCREEN = [
   {
     target: '.sidenav',
     side: 'right',
-    title: '🧭 Ten pages',
-    text: `<p>The left menu has ten pages: <b>Board</b> (all prices), <b>Trade</b> (one symbol), <b>Portfolio</b>, <b>News</b>,
-      <b>Leverage</b>, <b>Labs</b>, <b>Robo</b>, <b>Learn</b>, <b>Goals</b> and <b>Terminal</b>. We visit each one next.</p>
+    title: '🧭 Nine pages',
+    text: `<p>The left menu has nine pages: <b>Board</b> (all prices), <b>Trade</b> (one symbol), <b>Portfolio</b>, <b>News</b>,
+      <b>Leverage</b>, <b>Labs</b>, <b>Robo</b>, <b>Learn</b> and <b>Goals</b>. We visit each one next.</p>
       <p class="muted">The <b>Tour</b> button at the bottom replays this tutorial any time.</p>`,
   },
   {
@@ -157,15 +157,15 @@ const PAGES = [
   {
     page: 'news', target: '#page-news .card:has([data-f="list"])', side: 'right',
     title: '📰 News',
-    text: `<p>Headlines hit one company, one sector or the whole market, and move prices. Each one shows how <b>Laya</b>
-      (a small AI on this computer) and a <b>keyword counter</b> guessed good or bad, and after the closing bell what
+    text: `<p>Headlines hit one company, one sector or the whole market, and move prices. Each one shows how a <b>sentence reader</b>
+      (its answers were worked out beforehand) and a <b>keyword counter</b> guessed good or bad, and after the closing bell what
       <b>really</b> happened (✔ or ✗).</p>
       <p class="muted">No news yet? Open the market: about one day in four brings a headline.</p>`,
   },
   {
     page: 'news', target: '#page-news .card:has([data-f="hl"])', side: 'left',
     title: '🗞️ Headline Lab',
-    text: `<p>Write your own headline and see whether the AI and the word counter call it good or bad. Try
+    text: `<p>Write your own headline and see what the word counter makes of it. Try
       <i>"Profits fall less than feared"</i>: prices move on <b>surprises</b>, so counting words often gets it wrong.</p>`,
   },
   {
@@ -209,12 +209,6 @@ const PAGES = [
     text: `<p>Challenges are <b>fixed markets with a story and a goal</b>, like surviving a crash. Everyone gets the same market,
       so you can compare results with classmates.</p>
       <p><b>Free play</b> at the bottom starts a new random market, or replays one from a <b>seed</b> number.</p>`,
-  },
-  {
-    page: 'terminal', target: '#page-terminal .terminal-in', side: 'top',
-    title: '⌨️ Terminal',
-    text: `<p>Every button in the app just runs a typed command, and you can type them yourself. <code>help</code> lists them all.
-      Try <code>quote NVDA</code>, <code>market tech</code>, <code>coach</code> or <code>whatif</code>.</p>`,
   },
 ];
 

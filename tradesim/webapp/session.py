@@ -1,8 +1,8 @@
 """One browser player's game, and the notices the page pops up as toasts (D-37).
 
 Every action is an ordinary command line ("buy NVDA 20", "tick 1", "next 5") run by
-cli.app.execute, exactly as a terminal player would type it, so the web app, the REPL
-and agent mode share one set of rules and error messages. After each command we compare
+cli.app.execute, so a saved game can replay the lines it stored and every rule and error
+message lives in one place. After each command we compare
 the game with a snapshot taken just before and queue a Notice for every change:
 trades, coach tips, breaking news, margin calls, the closing bell and badges.
 """
@@ -10,14 +10,14 @@ trades, coach tips, breaking news, margin calls, the closing bell and badges.
 from pathlib import Path
 
 from tradesim import config
-from tradesim.ai.sentiment import SentimentClassifier
 from tradesim.cli import app, savegame
 from tradesim.education import achievements, coach
+from tradesim.education.headline_lab import Verdict
 from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine import intraday
 from tradesim.engine.errors import TradeSimError
 from tradesim.engine.game import Game
-from tradesim.loader import load_events
+from tradesim.loader import load_events, load_readings
 
 
 class Notice:
@@ -55,23 +55,22 @@ class Snapshot:
 
 
 class WebSession:
-    """The game shown in the browser, the AI helpers and the queue of notices."""
+    """The game shown in the browser, the stored headline readings and the queue of notices."""
 
     def __init__(self, seed: int | None = None, days: int = config.GAME_DAYS,
-                 ai: SentimentClassifier | None = None, robo: RoboAnalyst | None = None,
+                 readings: dict[str, Verdict] | None = None, robo: RoboAnalyst | None = None,
                  db_path: Path | None = None) -> None:
-        """Start (or resume) a game; tests pass a fake `ai` so the model is never loaded.
+        """Start (or resume) a game; `readings` maps a headline to its stored good/bad reading.
 
         With a `db_path` every command is saved there; None keeps the game in memory only.
         """
-        self.ai = ai or SentimentClassifier()
+        self.readings = load_readings() if readings is None else readings
         self.robo = robo or app.robo_model()
         self.db_path = db_path
         self.game_id: int | None = None
         self.game = self.open_game(seed, days)
         self.words = load_events(self.game.market.stocks)   # keyword lists
         self.notices: list[Notice] = []
-        self.last_output: list = []
         self._next_id = 1
         self.news_seen: set[int] = set()
         self._forget_old_news()
@@ -92,10 +91,13 @@ class WebSession:
             self.game_id = savegame.start_game(self.db_path, config.WEB_SLOT, game)
         return game
 
-    def run(self, line: str) -> list:
-        """Run one command line, save it and queue notices for what changed. Raises TradeSimError."""
+    def run(self, line: str) -> dict | None:
+        """Run one command line, save it and queue notices for what changed. Raises TradeSimError.
+
+        Returns the command's result (see cli/app.py), or None for commands that only act.
+        """
         before = Snapshot(self.game)
-        self.last_output = app.execute(self.game, line, self.ai, self.db_path)
+        result = app.execute(self.game, line)
         if self.db_path is not None:
             self.game_id = savegame.save_after(self.db_path, config.WEB_SLOT, self.game, self.game_id, line)
         if self.game.portfolio is not before.portfolio:      # `new` or `challenge` restarted
@@ -104,7 +106,7 @@ class WebSession:
             self.notify("game", "New game", f"{name} — the market opens when you press Start.")
         else:
             self._announce(before)
-        return self.last_output
+        return result
 
     def notify(self, kind: str, title: str, text: str, data: dict | None = None) -> None:
         """Queue one notice (only the newest WEB_MAX_NOTICES are kept)."""
@@ -163,10 +165,10 @@ class WebSession:
         for day in fresh[-3:]:
             for event in market.events_on(day):
                 when = intraday.clock_text(market.session(day).news_tick)
-                verdict = self.ai.cached(event.headline)
+                verdict = self.readings.get(event.headline)
                 self.notify("news", f"Breaking · Day {day} {when}", event.headline,
                             {"day": day, "explanation": event.explanation,
-                             "ai": verdict.label if verdict else None})
+                             "reading": verdict.label if verdict else None})
         self.news_seen.update(fresh)
 
     def day_summary(self, start: int) -> dict:

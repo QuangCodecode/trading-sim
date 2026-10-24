@@ -1,5 +1,8 @@
 # 05 — Testing plan
 
+> **D-50:** the terminal game, agent mode, the rich screens and Laya are gone, and so are `test_charts.py`, `test_agent.py`
+> and `test_sentiment.py`. `test_app.py` now tests the command layer, and `test_stdlib_only.py` guards "no packages".
+
 Testing against a specification is an assessed learning outcome (LO9), and a green test
 run is a strong demo/tutor talking point. Use **pytest**.
 
@@ -83,10 +86,6 @@ def game(tiny_market, portfolio):
   (and the last one's message contains `Did you mean "buy"`).
 - `"   "` → `None` (ignored); aliases map correctly (`pf` → `portfolio`).
 
-### `test_charts.py`
-- Output has exactly `CHART_HEIGHT` plot rows; flat series doesn't crash; max value sits
-  on the top row and min on the bottom row; sparkline length == input length.
-
 ### `test_diversification_lab.py` (Phase 1)
 - On `tiny_market` with a jumpy stock and calm ETF: stock vol > ETF vol; verdict includes
   the "swung … harder" sentence.
@@ -109,7 +108,7 @@ def game(tiny_market, portfolio):
 - Hold MIX6 on `tiny_market` → hand-computed final value.
 - No strategy uses future prices (strategy receives a market view capped at the current day).
 
-### `test_headline_lab.py` (Phase 5, no network)
+### `test_headline_lab.py` (Phase 5)
 - `keyword_verdict`:
   - "Chip export curbs hit tech stocks" → negative.
   - The tricky "Walmart sales not as bad as feared" → negative. This documents the counter's weakness on purpose.
@@ -117,12 +116,8 @@ def game(tiny_market, portfolio):
 - `score` with a **fake classifier** (a plain function returning fixed `Verdict`s) gives the correct hit counts.
 - `score` with a classifier that always returns `None` gives an "offline" result: no Jev hits, no crash.
 
-### `test_sentiment.py` (Phase 5, network mocked)
-- A cache hit returns the stored verdict, and the network function is never called (use `monkeypatch`).
-- No `JEV_API_KEY` → `None`, without calling the network.
-- The network function raises `TimeoutError` / `URLError`, or returns malformed JSON → `None`.
-- A corrupt cache file is treated as empty, and the next save rewrites it.
-- **Determinism guard:** take a snapshot of every `Market` price, run `headline_lab.score` over all events, and assert the prices are unchanged (D-20).
+### `test_loader.py` — stored readings (E-05, D-50)
+- Every shipped headline has a stored reading (label positive/negative, confidence 0.5–1), and loading them never changes a market (D-20).
 
 ### `test_database.py` / `test_savegame.py` (D-46, `tmp_path`)
 - Every reference section round-trips through `write_reference` → `read_section` with row, weight and transition order kept (they feed the seeded RNG).
@@ -132,12 +127,10 @@ def game(tiny_market, portfolio):
 - Web: resume after a restart (day, tick, holdings), `--seed` starts fresh and keeps the old game, a finished game is not resumed,
   `new`/`challenge` archive, a damaged save starts a new game with a message, `db_path=None` saves nothing, `/api/games`.
 
-### `test_agent.py` (X-06, `tmp_path`, never loads Laya)
-- The first call saves the game with its seed and days. Only successful state-changing lines are recorded.
-- State carries over between calls, and a 5-command replay gives the same equity as one live session.
-- A garbage file, another version, a tampered command and an unknown challenge → exit 1, "damaged".
-- A different `--seed` is refused. Output has no ANSI codes and starts with the status line.
-- `execute` raises while `run_command` doesn't. `main.parse_args` without command words → REPL.
+### `test_app.py` (the command layer, D-50) and `test_stdlib_only.py`
+- Every odd line (`buy`, `next -2`, `hl`, `quit`, `ünïcødé 🚀`, 500 characters…) returns a result or raises a `TradeSimError`, never anything else.
+- `quiz` marks the answer and keeps the score, `hl` reports what the word counter found, `lab mc` returns both columns, the "visit" commands (`robo`, `news`, `whatif`, `levlab`, `lab`) unlock their badges.
+- `test_stdlib_only.py` parses every `.py` of the game and its tools: only the standard library and `tradesim` may be imported.
 
 ### `test_intraday.py` (D-39, D-40)
 - Variance clock 0 → 1, bridges start and end at 0; a session runs from yesterday's close to today's close for stocks and ETFs; ETF ticks follow the §3.3 formula.
@@ -150,9 +143,9 @@ def game(tiny_market, portfolio):
 
 ### `test_leverage.py` (E-08 and the new commands)
 - 1× run = buy and hold; 2× ≈ double the move plus interest; 5× is called on day 4 and ends in debt; the 2× daily fund shows volatility decay; lessons; risk table.
-- `leverage`, `tick`, `levlab` (works from day 0 thanks to the history), `market SECTOR`; Margin Madness punishes doing nothing; new badges.
+- `leverage`, `tick`, `levlab` (works from day 0 thanks to the history); Margin Madness punishes doing nothing; new badges.
 
-### `test_webapp.py` (D-37, never loads Laya)
+### `test_webapp.py` (D-37)
 - Trading dates skip weekends; the state is JSON-ready; the board never shows prices past the current tick.
 - Notices: trade, badge, closing bell (with summary), news only once it breaks, margin call, leverage change, a new game forgets old news.
 - Charts (1D candles, daily + live candle, bad span), trade markers on the right candle, every page's builder.
@@ -187,18 +180,13 @@ pytest -q --cov=tradesim --cov-report=term-missing   # coverage (target ≥ 85% 
 
 | # | Do | Expect |
 |---|---|---|
-| 1 | `python3 main.py --seed 42` | Banner with disclaimer + seed |
-| 2 | `market`, `etf` | 7 rows; MIX6 composition sums to 100% |
-| 3 | `buy nvda 10`, `buy NVDA 99999`, `buy XYZ 1`, `buy nvda ten` | success, then 3 friendly errors, no traceback |
-| 4 | `next 5`, `portfolio` | day 5; P&L parts add up to total |
-| 5 | `sell nvda all`, `history` | position gone; 2 trades listed |
-| 6 | `lab`, `lab KO`, `chart NVDA MIX6` | tables + chart render, verdict readable |
-| 7 | `next 100` | caps at final day; final report shows |
-| 8 | `buy AAPL 1` after end | GameOverError message |
-| 9 | `whatif` (Phase 4) | "Your trades" matches final equity |
-| 10 | Ctrl+C mid-game | graceful exit, no traceback |
-| 11 | Run twice with `--seed 42` and same commands | identical output |
-| 12 | `rm -f saves/player.db; uv run main.py --seed 42 market; uv run main.py buy nvda 20; uv run main.py next 5; uv run main.py portfolio` | NVDA position on day 5, each exit code 0 |
-| 13 | `uv run main.py buy XYZ 1; echo $?` | one `✗` line, `1` |
-| 14 | `uv run main.py --web --seed 42`: Open the market, double-click NVDA → buy 10, Trade page (1D and All), Leverage 2× → buy MKT100 max, Skip 20 days, every page, Terminal `buy NOPE 1` | live board, toasts, closing bell; red toast/line for the bad command; no traceback in the server terminal |
-| 15 | Same, at 15× speed for a whole day, then **To close ⏭** and **Skip to the end** | the clock never stalls; final report dialog |
+| 1 | `python3 -m venv /tmp/blank && /tmp/blank/bin/python main.py --seed 42 --no-browser` (no packages installed) | "TradeSim is running at http://127.0.0.1:8000 (seed 42, day 0)"; `/api/state` answers |
+| 2 | Open the page in a browser: Board, Trade (`#trade/NVDA`), Portfolio, News, Leverage, Labs, Robo, Learn, Goals | every page loads, no red error in the browser console |
+| 3 | Trade: buy 10 NVDA, `NVDA 99999`, sell all | success toast, then friendly red toasts, never a traceback in the server terminal |
+| 4 | Skip 5 days; check the portfolio | P&L parts add up to the total |
+| 5 | Skip to the end | final report dialog (grade, goals, coach, hidden story); `🏁 Finisher` badge |
+| 6 | Run twice with `--seed 42` and the same clicks | identical numbers |
+| 7 | Restart the server without `--seed` | the same day and holdings come back (D-46) |
+| 8 | Labs → 200 markets; Learn → answer a quiz question; News → test your own headline | each shows its result card; the badges toast |
+| 9 | `python3 main.py --seed 42`: Open the market, double-click NVDA → buy 10, Trade page (1D and All), Leverage 2× → buy MKT100 max, Skip 20 days, every page | live board, toasts, closing bell; no traceback in the server terminal |
+| 10 | Same, at 15× speed for a whole day, then **To close ⏭** and **Skip to the end** | the clock never stalls; final report dialog |

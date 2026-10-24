@@ -1,8 +1,7 @@
-"""E-05 Headline Lab logic, with a fake classifier (never the real model)."""
+"""E-05 Headline Lab logic: the keyword counter and the real outcome of a headline."""
 
 import pytest
 
-from tradesim import config
 from tradesim.education import headline_lab as hl
 from tradesim.engine.events import MarketEvent
 from tradesim.loader import load_events
@@ -39,27 +38,3 @@ def test_counter_shows_which_words_it_counted(words):
 def test_truth_is_sign_of_shock():
     assert hl.truth(event("x", 0.04)) == hl.POSITIVE
     assert hl.truth(event("x", -0.01)) == hl.NEGATIVE
-
-
-def test_score_with_fake_classifier_counts_hits(words):
-    events = [event("Walmart sales not as bad as feared", 0.05),
-              event("Chip export curbs hit tech stocks", -0.08)]
-    answers = {"Walmart sales not as bad as feared": hl.Verdict(hl.POSITIVE, 0.61, "laya"),
-               "Chip export curbs hit tech stocks": hl.Verdict(hl.POSITIVE, 0.55, "laya")}
-    result = hl.score(events, answers.get, *words)
-    assert (result.keyword_hits, result.ai_hits) == (1, 1)
-    assert result.lessons() == ["Simple headlines are easy. Watch the tricky ones."]
-    assert result.rows[1].ai.is_unsure()
-
-
-def test_ai_beating_counter_gives_whole_sentence_lesson(words):
-    events = [event("Walmart sales not as bad as feared", 0.05)]
-    result = hl.score(events, lambda text: hl.Verdict(hl.POSITIVE, 0.9, "laya"), *words)
-    assert "whole sentence" in result.lessons()[0]
-
-
-def test_offline_classifier_gives_keyword_only_result(words):
-    events = [event("Chip export curbs hit tech stocks", -0.08)]
-    result = hl.score(events, lambda text: None, *words)
-    assert result.ai_hits == 0 and not result.ai_online
-    assert result.lessons() == ["AI offline: keyword counter only."]

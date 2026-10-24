@@ -1,9 +1,9 @@
 // The smaller pages: News (+ Headline Lab), Labs (diversification, what-if, Monte Carlo),
-// Robo-analyst, Learn (quiz, badges, glossary), Challenges and the Terminal.
+// Robo-analyst, Learn (quiz, badges, glossary) and Challenges.
 // Each page is {mount(section), show(arg)}; app.js calls them.
 
 import { getJSON } from './api.js';
-import { run } from './actions.js';
+import { run, visit } from './actions.js';
 import { store, onState } from './store.js';
 import { money, pct, direction, esc } from './fmt.js';
 import { LineChart, chartBox } from './chart.js';
@@ -11,6 +11,31 @@ import { openDialog, closeDialog } from './ui.js';
 
 const COLOURS = ['#3987e5', '#d95926', '#199e70', '#c98500'];
 const plain = (fraction, dp = 1) => pct(fraction, dp).replace('+', '');
+
+/** The word counter's reading of a headline the player typed (the `hl` command's result). */
+function headlineResult(r) {
+  const tone = r.label === 'positive' ? 'up' : r.label === 'negative' ? 'down' : 'flat';
+  return `<div class="lesson"><b class="${tone}">${esc(r.label)}</b> · the word counter found: ${esc(r.found)}.
+    <p class="secondary" style="margin:4px 0 0">It only adds up listed words. Read the whole sentence yourself: is it a surprise, and a good or a bad one?</p></div>`;
+}
+
+/** The 200-markets table (the `lab mc` command's result). */
+function monteCarloTable(r) {
+  const row = (label, cell) => `<tr><td class="left">${label}</td>${r.sides.map((s) => `<td>${cell(s)}</td>`).join('')}</tr>`;
+  const [stock, fund] = r.sides;
+  return `<table class="data"><thead><tr><th class="left"></th>${r.sides.map((s) => `<th>${s.symbol}</th>`).join('')}</tr></thead><tbody>
+      ${row('Average return', (s) => `<span class="${direction(s.average, 0)}">${pct(s.average, 1)}</span>`)}
+      ${row(`Lost more than ${plain(-r.threshold, 0)}`, (s) => `${plain(s.big_loss, 0)} of runs`)}
+      ${row('Best run', (s) => pct(s.best, 1))}${row('Worst run', (s) => pct(s.worst, 1))}</tbody></table>
+    <div class="lesson">In ${r.runs} simulated markets, ${stock.symbol} lost more than ${plain(-r.threshold, 0)} in ${plain(stock.big_loss, 0)} of them;
+      ${fund.symbol} in ${plain(fund.big_loss, 0)}. Diversification is about odds, not luck.</div>`;
+}
+
+/** Right or wrong, the explanation and the running score (the `quiz` command's result). */
+function quizFeedback(r) {
+  return `<div class="lesson ${r.correct ? 'good' : 'bad'}"><b>${r.correct ? '✔ Correct!' : `✗ Not quite — the answer is ${r.answer}.`}</b>
+    <p style="margin:4px 0">${esc(r.explain)}</p><span class="muted">Score ${r.right}/${r.asked}. The next question is above.</span></div>`;
+}
 
 /** Re-run `load` when a new day closes while the page is open. */
 function reloadOnNewDay(section, load) {
@@ -28,13 +53,13 @@ export const news = {
     this.section = section;
     section.innerHTML = `
       <div class="page-head"><div><h1>News</h1><p>Headlines move prices: one company, one sector or the whole market.
-        Laya (a small AI running on this computer) and a simple keyword counter each guess whether a headline is good or bad news.
+        A "sentence reader" (its answers were worked out beforehand) and a simple keyword counter each guess whether a headline is good or bad news.
         After the closing bell you see what really happened.</p></div><div data-f="score"></div></div>
       <div class="grid cols-main-side">
         <div class="card"><div data-f="list"></div></div>
         <div><div class="card"><h2>🗞️ Headline Lab: test your own</h2>
-          <p class="secondary" style="margin-top:0">Write a headline. Can word counting tell good news from bad as well as an AI?</p>
-          <div class="terminal-in" style="margin-top:0"><input data-f="hl" placeholder="e.g. Losses narrow sharply at chipmaker" maxlength="200" aria-label="Your headline">
+          <p class="secondary" style="margin-top:0">Write a headline and see what the word counter makes of it. Does it get the tricky ones right?</p>
+          <div class="input-row" style="margin-top:0"><input data-f="hl" placeholder="e.g. Losses narrow sharply at chipmaker" maxlength="200" aria-label="Your headline">
             <button class="btn primary" data-f="hl-go">Test</button></div><div data-f="hl-out" style="margin-top:10px"></div></div>
           <div class="card"><h2>Why news moves prices</h2><p class="secondary" style="margin:0">Prices move on <b>surprises</b>.
             "Profits fall less than feared" is good news: investors expected worse. That is why counting good and bad words often gets it wrong.</p></div></div>
@@ -42,9 +67,8 @@ export const news = {
     const go = async () => {
       const text = section.querySelector('[data-f="hl"]').value.trim();
       if (!text) return;
-      section.querySelector('[data-f="hl-out"]').innerHTML = '<p class="muted">Asking Laya… (the first time loads the model, about 10 s)</p>';
-      const reply = await run(`hl "${text.replace(/"/g, "'")}"`, { html: true, quiet: true });
-      section.querySelector('[data-f="hl-out"]').innerHTML = reply.error ? `<p class="down">${esc(reply.error)}</p>` : `<div class="report">${reply.html}</div>`;
+      const reply = await run(`hl "${text.replace(/"/g, "'")}"`, { quiet: true });
+      section.querySelector('[data-f="hl-out"]').innerHTML = reply.error ? `<p class="down">${esc(reply.error)}</p>` : headlineResult(reply.result);
     };
     section.querySelector('[data-f="hl-go"]').addEventListener('click', go);
     section.querySelector('[data-f="hl"]').addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
@@ -55,7 +79,7 @@ export const news = {
       if (count !== seen) { seen = count; this.load(); }
     });
   },
-  show() { this.load(); },
+  show() { visit('news'); this.load(); },
   async load() {
     const { news: items } = await getJSON('/api/news');
     const list = this.section.querySelector('[data-f="list"]');
@@ -70,15 +94,15 @@ export const news = {
         <div><div class="headline">${esc(n.headline)}</div><div class="why">${esc(n.explanation)}</div>
           ${n.moves.length ? `<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${n.moves.map(([s, m]) => `<a class="chip ${direction(m, 0)}" href="#trade/${s}">${s} ${pct(m / 100, 1)}</a>`).join('')}</div>`
             : '<div class="muted" style="margin-top:6px;font-size:12px">Breaking today: the full effect is known at the close.</div>'}</div>
-        <dl class="verdicts"><dt>Laya AI</dt><dd>${n.ai ? `${esc(n.ai.label)} ${plain(n.ai.confidence, 0)}${mark(n.ai.label, n.truth)}` : '<span class="muted">not asked yet</span>'}</dd>
+        <dl class="verdicts"><dt>Reader</dt><dd>${n.reading ? `${esc(n.reading.label)} ${plain(n.reading.confidence, 0)}${mark(n.reading.label, n.truth)}` : '<span class="muted">no reading</span>'}</dd>
           <dt>Keywords</dt><dd>${esc(n.words)}${mark(n.words, n.truth)}</dd>
           <dt>Really</dt><dd>${n.truth ? `<b class="${n.truth === 'positive' ? 'up' : 'down'}">${n.truth}</b>` : '<span class="muted">after the close</span>'}</dd></dl>
       </div>`).join('');
     const closed = items.filter((n) => n.truth);
-    const ai = closed.filter((n) => n.ai && n.ai.label === n.truth).length;
+    const read = closed.filter((n) => n.reading && n.reading.label === n.truth).length;
     const words = closed.filter((n) => n.words === n.truth).length;
     this.section.querySelector('[data-f="score"]').innerHTML = closed.length
-      ? `<div class="chip">Score so far · Laya ${ai}/${closed.length} · keywords ${words}/${closed.length}</div>` : '';
+      ? `<div class="chip">Score so far · reader ${read}/${closed.length} · keywords ${words}/${closed.length}</div>` : '';
   },
 };
 
@@ -114,16 +138,16 @@ export const labs = {
     section.querySelector('[data-f="mc-go"]').addEventListener('click', async () => {
       const out = section.querySelector('[data-f="mc-out"]');
       out.innerHTML = '<p class="muted">Building 200 markets…</p>';
-      const reply = await run('lab mc NVDA', { html: true, quiet: true });
-      out.innerHTML = reply.error ? `<p class="down">${esc(reply.error)}</p>` : reply.html;
+      const reply = await run('lab mc NVDA', { quiet: true });
+      out.innerHTML = reply.error ? `<p class="down">${esc(reply.error)}</p>` : monteCarloTable(reply.result);
     });
     reloadOnNewDay(section, () => this.show());
   },
   show() {
     this.section.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === this.tab)));
     this.section.querySelectorAll('[data-panel]').forEach((p) => { p.hidden = p.dataset.panel !== this.tab; });
-    if (this.tab === 'div') this.loadDiv();
-    if (this.tab === 'whatif') this.loadWhatIf();
+    if (this.tab === 'div') { visit('lab'); this.loadDiv(); }
+    if (this.tab === 'whatif') { visit('whatif'); this.loadWhatIf(); }
   },
   async loadDiv() {
     const stock = this.section.querySelector('[data-f="stock"]').value;
@@ -175,7 +199,7 @@ export const robo = {
       <div data-f="body"></div>`;
     reloadOnNewDay(section, () => this.load());
   },
-  show() { this.load(); },
+  show() { visit('robo'); this.load(); },
   async load() {
     const d = await getJSON('/api/robo');
     const body = this.section.querySelector('[data-f="body"]');
@@ -231,8 +255,8 @@ export const learn = {
       ${q.options.map((o, i) => `<button class="quiz-option" data-letter="${'ABCD'[i]}"><b>${'ABCD'[i]}</b>${esc(o)}</button>`).join('')}
       <div data-f="feedback" class="report">${this.feedback}</div>`;
     box.querySelectorAll('[data-letter]').forEach((b) => b.addEventListener('click', async () => {
-      const reply = await run(`quiz ${b.dataset.letter}`, { html: true });
-      this.feedback = reply.error ? '' : reply.html;
+      const reply = await run(`quiz ${b.dataset.letter}`);
+      this.feedback = reply.error ? '' : quizFeedback(reply.result);
       this.load();
     }));
   },
@@ -252,7 +276,7 @@ export const challenges = {
     section.innerHTML = `<div class="page-head"><div><h1>🎯 Challenges</h1><p>Fixed markets with a story and a goal. Everyone gets the same market, so you can compare results with classmates.</p></div></div>
       <div data-f="current"></div><div class="grid cols-3" data-f="list"></div>
       <div class="card" style="margin-top:12px"><h2>Free play</h2><p class="secondary">A new random market (or type a seed to replay one, e.g. 42 or 180).</p>
-        <div class="terminal-in" style="max-width:420px"><input data-f="seed" placeholder="Seed (blank = random)" inputmode="numeric" aria-label="Seed">
+        <div class="input-row" style="max-width:420px"><input data-f="seed" placeholder="Seed (blank = random)" inputmode="numeric" aria-label="Seed">
         <button class="btn primary" data-f="new">New game</button></div></div>`;
     section.querySelector('[data-f="new"]').addEventListener('click', () => {
       const seed = section.querySelector('[data-f="seed"]').value.replace(/\D/g, '');
@@ -288,39 +312,4 @@ export const challenges = {
       ${c.goals.map((g) => `<div class="row" style="display:flex;gap:8px;padding:3px 0">${g.passed ? '✅' : '⬜'} ${esc(g.text)} <span class="muted">· now ${esc(g.now)}</span></div>`).join('')}
       <p class="muted" style="margin:6px 0 0">Goals are judged on the final day.</p></div>` : '';
   },
-};
-
-// ---------------------------------------------------------------- Terminal
-export const terminal = {
-  mount(section) {
-    this.section = section;
-    this.history = [];
-    this.at = 0;
-    section.innerHTML = `<div class="page-head"><div><h1>Terminal</h1><p>Every command of the terminal version works here too: try
-      <code>help</code>, <code>market tech</code>, <code>quote NVDA</code>, <code>leverage</code>, <code>levlab</code>, <code>story</code>, <code>whatif</code>, <code>coach</code>.</p></div></div>
-      <div class="terminal-out" data-f="out" aria-live="polite"></div>
-      <form class="terminal-in" data-f="form"><input data-f="in" placeholder="Type a command and press Enter" autocomplete="off" aria-label="Command">
-        <button class="btn primary">Run</button></form>`;
-    const input = section.querySelector('[data-f="in"]');
-    section.querySelector('[data-f="form"]').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const line = input.value.trim();
-      if (!line) return;
-      this.history.push(line);
-      this.at = this.history.length;
-      input.value = '';
-      const out = section.querySelector('[data-f="out"]');
-      out.insertAdjacentHTML('beforeend', `<div class="cmd">&gt; ${esc(line)}</div>`);
-      const reply = await run(line, { html: true, quiet: true });
-      out.insertAdjacentHTML('beforeend', reply.error ? `<div class="err">✗ ${esc(reply.error)}</div>` : reply.html);
-      out.scrollTop = out.scrollHeight;
-    });
-    input.addEventListener('keydown', (e) => {
-      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-      e.preventDefault();
-      this.at = Math.max(0, Math.min(this.history.length, this.at + (e.key === 'ArrowUp' ? -1 : 1)));
-      input.value = this.history[this.at] || '';
-    });
-  },
-  show() { this.section.querySelector('[data-f="in"]').focus(); },
 };

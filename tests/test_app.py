@@ -1,32 +1,28 @@
-"""cli/app.py: no input line may ever raise (N-02)."""
-
-import io
+"""cli/app.py: the commands every front end sends. A bad line raises a TradeSimError, never anything else (N-02)."""
 
 import pytest
-from rich.console import Console
 
-from tradesim.cli import app, savegame
-from tradesim.education.headline_lab import Verdict
+from tradesim.cli import app
 from tradesim.engine.errors import TradeSimError
 
+# Lines a player (or an old saved game) might send. Each either works or raises a TradeSimError.
 BAD_OR_ODD_LINES = [
-    "robo NOPE", "robo a b", "challenge nope", "challenge a b", "learn spaceship", "quiz z",
-    "quiz a b", "new abc", "whatif", "story", "coach", "badges", "sectors", "learn",
-    "", "   ", "buy", "buy XYZ 1", "buy JUMP 999999", "buy JUMP ten", "buy JUMP 1.5",
-    "sell JUMP all", "sell JUMP 3", "next 0", "next -2", "next abc", "lab", "lab FUND",
-    "lab JUMP CALM", "lab NOPE", "chart", "chart NOPE", "quote", "etf JUMP", "etf NOPE",
-    "help nope", "hl", "x" * 500, "market [/x]", 'hl "[/x] beats"', "quote [/b]", "buy JUMP ²",
-    "next ³", "new 99999999999999999999", "ünïcødé 🚀", "quit", "news", "news 0", "news 99", "news 3", "next 999", "buy JUMP 1",
+    "robo NOPE", "robo a b", "challenge", "challenge nope", "challenge a b", "quiz z", "quiz a b", "quiz",
+    "new abc", "whatif", "", "   ", "buy", "buy XYZ 1", "buy JUMP 999999", "buy JUMP ten",
+    "buy JUMP 1.5", "sell JUMP all", "sell JUMP 3", "next 0", "next -2", "next abc", "lab",
+    "lab FUND", "lab MC NOPE", "lab MC JUMP CALM", "levlab", "hl", 'hl "[/x] beats"', "x" * 500,
+    "buy JUMP ²", "next ³", "new 99999999999999999999", "ünïcødé 🚀", "quit", "market", "news",
+    "next 999", "buy JUMP 1", "leverage", "leverage 9", "leverage two",
 ]
 
 
 @pytest.mark.parametrize("line", BAD_OR_ODD_LINES)
-def test_any_line_returns_output_without_raising(game, line):
-    output = app.run_command(game, line)
-    assert isinstance(output, list)
-    console = Console(file=io.StringIO(), width=100)
-    for renderable in output:              # Bug 23: "[/x]" in the text crashed rich when printed
-        console.print(renderable)
+def test_any_line_returns_a_result_or_a_friendly_error(game, line):
+    try:
+        result = app.execute(game, line)
+    except TradeSimError:
+        return
+    assert result is None or isinstance(result, dict)
 
 
 def test_new_refuses_a_seed_too_big_to_save(game):
@@ -36,102 +32,50 @@ def test_new_refuses_a_seed_too_big_to_save(game):
 
 
 def test_buy_max_spends_almost_all_cash(game):
-    app.run_command(game, "buy fund max")
+    app.execute(game, "buy fund max")
     assert 0 <= game.portfolio.cash < game.market.price("FUND", 0) + 1
 
 
-def test_full_scripted_game_ends_with_report(game):
+def test_full_scripted_game_ends(game):
     for line in ["buy jump 10", "next 2", "sell jump all", "next 99", "lab"]:
-        app.run_command(game, line)
+        app.execute(game, line)
     assert game.is_over()
     assert len(game.portfolio.trades) == 2
 
 
-class FakeAI:
-    """Answers every headline 'negative 55%' without loading a model."""
-
-    def cached(self, headline):
-        return self.classify(headline)
-
-    def classify(self, headline):
-        return Verdict("negative", 0.55, "laya")
-
-
-def test_every_screen_renders_on_a_real_market():
+def test_quiz_marks_the_answer_and_keeps_the_score():
     game = app.new_game(42, 60)
-    console = Console(file=io.StringIO(), width=100)
-    script = ["help", "help buy", "market", "quote nvda", "chart nvda", "chart nvda mix6", "etf",
-              "robo", "story", "buy nvda 40", "buy mix6 max", "next 25", "news 21", "news 3", "portfolio",
-              "history", "lab", "lab ko", "lab mc", "hl", 'hl "Shares soar"', "sell nvda all",
-              "robo", "robo nvda", "story", "sectors", "coach", "whatif", "badges", "learn",
-              "learn beta", "quiz", "quiz a", "challenge", "etf mkt100", "quote mkt100",
-              "report", "next 99", "story", "whatif", "challenge crash", "next 99", "new 5"]
-    errors = []
-    for line in script:
-        output = app.run_command(game, line, FakeAI())
-        errors += [(line, r) for r in output if isinstance(r, str) and r.startswith("[red]✗")]
-        for renderable in output:
-            console.print(renderable)
-    text = console.file.getvalue()
-    assert errors == []
-    assert "Laya: negative 55% (unsure)" in text
-    assert "Score: keywords" in text and "Final report" in text
-    assert "Robo-analyst" in text and "What-if Replay" in text and "Survive the Crash" in text
+    first = app.execute(game, "quiz a")
+    assert set(first) == {"correct", "answer", "explain", "right", "asked"}
+    assert first["asked"] == 1 and first["right"] == int(first["correct"])
+    assert app.execute(game, "quiz") is None and len(game.quiz_results) == 1   # a bare quiz does nothing
 
 
-def test_grade_never_praises_a_loss_that_only_matched_the_market():
-    """Bug 6: holding MKT100 through a crash (−10% vs the market's −10.07%) got 'A+ Superb'."""
-    from tradesim.cli import views
-    game = app.new_game(106, 60)
-    app.execute(game, "buy MKT100 max")
-    app.execute(game, "next 60")
-    letter, _ = views.grade(game)
-    assert letter in ("C", "D")             # a loss level with the market is not an A
-
-
-def test_grade_b_for_losing_clearly_less_than_the_market():
-    from tradesim.cli import views
-    game = app.new_game(104, 60)             # a falling market (re-picked for the 100-stock universe)
-    app.execute(game, "buy DEF4 40")         # mostly cash, a little defensive fund
-    app.execute(game, "next 60")
-    market = game.market.price("MKT100", 60) / 100 - 1
-    mine = game.portfolio.total_return_pct(game.current_prices()) / 100
-    assert mine < 0 and mine > market + 0.01
-    assert views.grade(game)[0] == "B"
-
-
-def test_final_report_counts_the_last_day_badges():
+def test_headline_test_reports_what_the_word_counter_found():
     game = app.new_game(42, 60)
-    app.execute(game, "buy mkt100 10")
-    output = app.execute(game, "next 99")
-    finisher = next(i for i, r in enumerate(output) if "Finisher" in str(getattr(r, "plain", r)))
-    report = next(i for i, r in enumerate(output) if "Final report" in str(getattr(r, "title", "")))
-    assert finisher < report and "finisher" in game.badges
+    result = app.execute(game, 'hl "Record profits and strong growth"')
+    assert result["label"] == "positive" and "profits" in result["found"]
+    assert app.execute(game, 'hl "Quarterly meeting held"')["label"] == "neutral"
 
 
-# ---------------------------------------------------------------- games (saved games, D-46)
-
-def test_games_with_nothing_saved_says_how_to_start(game, tmp_path):
-    (text,) = app.execute(game, "games", None, tmp_path / "player.db")
-    assert "No saved games" in text
-
-
-def test_games_lists_saved_games_with_results_and_badges(game, tmp_path):
-    db = tmp_path / "player.db"
-    savegame.start_game(db, "agent", app.new_game(5, 10))              # still being played
-    finished = app.new_game(6, 5)
-    finished_id = savegame.start_game(db, "web", finished)
-    app.execute(finished, "buy NVDA 1")
-    app.execute(finished, "next 5")
-    savegame.record(db, finished_id, finished)
-    console = Console(file=io.StringIO(), width=120, color_system=None)
-    console.print(*app.execute(game, "games", None, db))
-    text = console.file.getvalue()
-    assert "Free play, seed 5" in text and "▶ playing now" in text
-    assert "Free play, seed 6" in text and "🏁 finished" in text
-    assert f"Badges won across games: {len(finished.badges)} /" in text
+def test_monte_carlo_returns_both_columns():
+    game = app.new_game(42, 60)
+    result = app.execute(game, "lab mc nvda")
+    assert [side["symbol"] for side in result["sides"]] == ["NVDA", "MIX6"]
+    assert result["runs"] == 200 and all(0 <= side["big_loss"] <= 1 for side in result["sides"])
 
 
-def test_games_needs_a_database(game):
-    with pytest.raises(TradeSimError, match="Saved games"):
-        app.execute(game, "games", None, None)
+def test_a_whole_game_with_every_command_runs_clean():
+    game = app.new_game(42, 60)
+    for line in ["leverage 2", "buy nvda 40", "buy mix6 max", "tick 30", "next 25", "sell nvda all",
+                 "quiz a", "news", "robo", "levlab", "lab", "whatif", "next 99", "challenge crash",
+                 "next 99", "new 5"]:
+        app.execute(game, line)
+    assert game.day == 0 and game.market.seed == 5            # `new 5` started over
+
+
+def test_the_looking_commands_unlock_their_badges():
+    game = app.new_game(42, 60)
+    for line in ["robo", "news", "whatif", "levlab", "lab"]:
+        app.execute(game, line)
+    assert {"robo", "news_hound", "time_traveller", "lev_lab", "scientist"} <= set(game.badges)

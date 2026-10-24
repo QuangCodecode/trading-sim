@@ -312,13 +312,8 @@ table.board { border-collapse: separate; border-spacing: 0; width: 100%; min-wid
 .verdicts { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 12px; align-content: start; }
 .verdicts dt { color: var(--text-muted); }
 .verdicts dd { margin: 0; }
-.terminal-out { background: #07090b; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 10px; min-height: 360px; max-height: calc(100vh - 260px); overflow: auto; }
-.terminal-out pre.rich { margin: 0 0 10px; font: 12.5px/1.35 var(--mono); white-space: pre; }
-.terminal-out .cmd { color: var(--accent); font: 12.5px var(--mono); margin: 6px 0 2px; }
-.terminal-out .err { color: var(--down); font: 12.5px var(--mono); }
-.terminal-in { display: flex; gap: 8px; margin-top: 10px; }
-.terminal-in input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; font: 13px var(--mono); }
-.report pre.rich { font: 12px/1.35 var(--mono); white-space: pre; margin: 0; overflow-x: auto; }
+.input-row { display: flex; gap: 8px; margin-top: 10px; }
+.input-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 9px 12px; font: 13px var(--mono); }
 
 /* ---------- toasts & dialogs ---------- */
 .toasts { position: fixed; right: 14px; bottom: calc(var(--status-h) + 10px); z-index: 50; display: flex; flex-direction: column-reverse; gap: 8px; width: 340px; pointer-events: none; }
@@ -393,3 +388,9 @@ dialog::backdrop { background: rgba(4, 6, 8, 0.7); backdrop-filter: blur(2px); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* the market's hidden moods in the report: one block per day */
+.timeline { display: flex; height: 14px; gap: 1px; margin: 6px 0 10px; }
+.timeline i { flex: 1; background: var(--text-muted); }
+.timeline .mood-bull { background: var(--up); } .timeline .mood-sideways { background: var(--warn); }
+.timeline .mood-bear { background: var(--down); } .timeline .mood-crash { background: #b04ad8; }

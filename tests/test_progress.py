@@ -20,7 +20,7 @@ def test_badges_are_announced_once(game):
 def test_command_badges_come_from_commands_used(game):
     app.execute(game, "next 5")
     assert "scientist" not in game.badges
-    app.execute(game, "lab JUMP FUND")
+    app.execute(game, "lab")
     assert "scientist" in game.badges
 
 

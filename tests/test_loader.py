@@ -6,7 +6,7 @@ import pytest
 
 from tradesim.database import write_reference
 from tradesim.engine.errors import DataFileError
-from tradesim.loader import load_events, load_regimes, load_universe
+from tradesim.loader import load_events, load_readings, load_regimes, load_universe
 
 GOOD = {
     "stocks": [
@@ -121,3 +121,23 @@ def test_bad_regime_tables_rejected(tmp_path, change, message):
     write_reference(path, {"regimes": data})
     with pytest.raises(DataFileError, match=message):
         load_regimes(path)
+
+
+def test_every_shipped_headline_has_a_stored_reading(universe):
+    stocks, _etfs = universe
+    readings = load_readings()
+    missing = [t["headline"] for t in load_events(stocks).templates if t["headline"] not in readings]
+    assert missing == [], "add a row to the sentiment table of data/reference.db for each"
+    assert {v.label for v in readings.values()} <= {"positive", "negative"}
+    assert all(0.5 <= v.confidence <= 1 for v in readings.values())
+
+
+def test_stored_readings_never_change_prices(universe):
+    """The Headline Lab only displays them: a market is identical with or without reading them."""
+    from tradesim.engine.market import Market
+    stocks, etfs = universe
+    templates = load_events(stocks).templates
+    before = Market(stocks, etfs, 42, 30, templates)
+    load_readings()
+    after = Market(stocks, etfs, 42, 30, templates)
+    assert all(before.history(s, 0, 30) == after.history(s, 0, 30) for s in before.symbols())

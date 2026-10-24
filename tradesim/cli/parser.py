@@ -8,45 +8,28 @@ from tradesim.engine.errors import CommandError
 MAX = "max"   # buy SYMBOL max
 ALL = "all"   # sell SYMBOL all
 
-# name → (usage line, one-line description). Order here is the order `help` shows.
+# name → (usage line, one-line description). The commands the web page sends (and a saved game
+# replays), plus a few "visit" commands that only record that a page was opened (for badges).
 COMMANDS = {
-    "market": ("market [SECTOR]", "Prices and trends: every symbol, one sector (market tech) or the ETFs (market etf)"),
-    "quote": ("quote SYMBOL", "Company profile, price and outlook, e.g. quote NVDA"),
-    "chart": ("chart SYMBOL [SYMBOL2]", "Price chart from day 0, e.g. chart NVDA MIX6"),
-    "sectors": ("sectors", "How each sector did today and since day 0"),
-    "etf": ("etf [SYMBOL]", "What's inside an ETF and why that matters, e.g. etf MKT100"),
     "buy": ("buy SYMBOL QTY", "Buy shares, e.g. buy AAPL 10 or buy MIX6 max"),
     "sell": ("sell SYMBOL QTY", "Sell shares, e.g. sell AAPL 5 or sell AAPL all"),
-    "portfolio": ("portfolio", "Your holdings, cash and profit/loss"),
-    "history": ("history", "Every trade you've made"),
     "next": ("next [N]", "Advance 1 or N trading days, e.g. next 5"),
     "tick": ("tick [N]", "Let today's session run N five-minute ticks (the day closes after 78)"),
-    "leverage": ("leverage [N]", "Your margin account, or set how much you may borrow, e.g. leverage 2"),
-    "levlab": ("levlab [SYMBOL]", "Leverage Lab: the market so far at 1×, 2×, 3×, 5× and a 2× daily fund"),
-    "news": ("news [DAY]", "Today's (or a past day's) news and how it moved the ETF"),
-    "lab": ("lab [STOCK] [ETF]", "Diversification Lab: one stock vs the ETF (lab mc = 200 markets)"),
-    "headlines": ('headlines  or  hl "TEXT"', "Headline Lab: can AI read the news better than word counting?"),
-    "robo": ("robo [SYMBOL]", "Robo-analyst: a tiny ML model reads the market's mood and the charts"),
-    "story": ("story", "The market's hidden moods so far (revealed late, like real economists)"),
-    "coach": ("coach", "Trade Coach: tips about your investing habits"),
-    "whatif": ("whatif", "What-if Replay: 11 strategies on the same market, ranked"),
-    "badges": ("badges", "Your achievements"),
-    "games": ("games", "Your saved games: results, challenges passed and badges across all of them"),
-    "challenge": ("challenge [NAME]", "List the challenges, or start one, e.g. challenge crash"),
-    "learn": ("learn [TERM]", "Glossary of investing words, e.g. learn beta"),
-    "quiz": ("quiz [A-D]", "Quiz yourself: quiz shows a question, quiz B answers it"),
+    "leverage": ("leverage [N]", "Set how much you may borrow, e.g. leverage 2"),
+    "levlab": ("levlab", "Visit the Leverage Lab"),
+    "news": ("news", "Visit the News page"),
+    "lab": ("lab [mc [STOCK]]", "Visit the Diversification Lab, or run 200 markets (lab mc NVDA)"),
+    "headlines": ('hl "TEXT"', "Headline Lab: what does the word counter say about your headline?"),
+    "robo": ("robo", "Visit the Robo-analyst"),
+    "whatif": ("whatif", "Visit the What-if Replay"),
+    "challenge": ("challenge NAME", "Start a challenge, e.g. challenge crash"),
+    "quiz": ("quiz [A-D]", "Answer the current quiz question, e.g. quiz B"),
     "new": ("new [SEED]", "Start a new free-play game (optionally a seed)"),
-    "report": ("report", "Your results so far"),
-    "help": ("help [COMMAND]", "List commands or explain one"),
-    "quit": ("quit", "End the game and show the final report"),
 }
-ALIASES = {"?": "help", "h": "help", "m": "market", "q": "quote", "c": "chart",
-           "b": "buy", "s": "sell", "pf": "portfolio", "p": "portfolio",
-           "hist": "history", "n": "next", "hl": "headlines", "exit": "quit",
-           "bot": "robo", "moods": "story", "replay": "whatif", "wi": "whatif",
-           "achievements": "badges", "ch": "challenge", "challenges": "challenge",
-           "glossary": "learn", "sector": "sectors", "wait": "tick", "t": "tick",
-           "lev": "leverage", "margin": "leverage", "ll": "levlab"}
+# Short names that older saved games may hold (savegame replays the lines it stored).
+ALIASES = {"b": "buy", "s": "sell", "n": "next", "hl": "headlines", "bot": "robo",
+           "replay": "whatif", "wi": "whatif", "ch": "challenge", "challenges": "challenge",
+           "wait": "tick", "t": "tick", "lev": "leverage", "margin": "leverage", "ll": "levlab"}
 
 
 class Command:
@@ -72,8 +55,6 @@ def parse(line: str) -> Command | None:
     name = resolve_name(words[0].lower())
     if name == "headlines":
         return Command(name, parse_headline_text(line))
-    if name == "learn":
-        return Command(name, [" ".join(words[1:])] if len(words) > 1 else [])
     args = [word.upper() for word in words[1:]]
     checker = ARG_CHECKERS.get(name, no_args)
     return Command(name, checker(name, args))
@@ -122,7 +103,7 @@ def symbol_and_qty(name: str, args: list[str]) -> list:
 
 
 def optional_number(name: str, args: list[str]) -> list:
-    """next [N] / news [DAY]: zero or one whole number."""
+    """next [N] / tick [N] / new [SEED] / leverage [N]: zero or one whole number."""
     if len(args) > 1:
         raise usage_error(name)
     if args and not args[0].isdecimal():
@@ -130,24 +111,11 @@ def optional_number(name: str, args: list[str]) -> list:
     return [int(word) for word in args]
 
 
-# How many symbols each symbol-only command accepts: (minimum, maximum).
-SYMBOL_COUNTS = {"quote": (1, 1), "chart": (1, 2), "etf": (0, 1), "lab": (0, 2), "robo": (0, 1),
-                 "levlab": (0, 1)}
-
-
-def symbol_args(name: str, args: list[str]) -> list:
-    """quote/chart/etf/lab: a number of symbols within SYMBOL_COUNTS[name]."""
-    minimum, maximum = SYMBOL_COUNTS[name]
-    if not minimum <= len(args) <= maximum:
+def lab_args(name: str, args: list[str]) -> list:
+    """lab, or lab MC [STOCK]."""
+    if len(args) > 2:
         raise usage_error(name)
     return args
-
-
-def optional_command(name: str, args: list[str]) -> list:
-    """help [COMMAND]: the topic is resolved like a typed command."""
-    if len(args) > 1:
-        raise usage_error(name)
-    return [resolve_name(word.lower()) for word in args]
 
 
 def optional_word(name: str, args: list[str]) -> list:
@@ -157,15 +125,10 @@ def optional_word(name: str, args: list[str]) -> list:
     return [word.lower() for word in args]
 
 
-def optional_text(name: str, args: list[str]) -> list:
-    """market [SECTOR]: any words, joined and lower-cased ("real estate")."""
-    return [" ".join(args).lower()] if args else []
-
-
 def parse_headline_text(line: str) -> list[str]:
-    """hl alone → []; hl "TEXT" → [TEXT] with quotes removed and original case kept."""
+    """hl "TEXT" → [TEXT] with quotes removed and original case kept."""
     if len(line.split()) == 1:
-        return []
+        raise usage_error("headlines")
     text = line.strip().split(maxsplit=1)[1].strip('"').strip("'").strip()
     if not text:
         raise usage_error("headlines")
@@ -180,15 +143,7 @@ ARG_CHECKERS = {
     "next": optional_number,
     "tick": optional_number,
     "leverage": optional_number,
-    "levlab": symbol_args,
-    "market": optional_text,
-    "news": optional_number,
-    "quote": symbol_args,
-    "chart": symbol_args,
-    "etf": symbol_args,
-    "lab": symbol_args,
-    "robo": symbol_args,
-    "help": optional_command,
+    "lab": lab_args,
     "challenge": optional_word,
     "quiz": optional_word,
     "new": optional_number,

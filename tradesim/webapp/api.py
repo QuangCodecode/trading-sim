@@ -6,23 +6,20 @@ running session is only read up to the current tick.
 """
 
 import datetime
-import io
 import math
 import statistics
 
-from rich.console import Console
-from rich.terminal_theme import MONOKAI
-
 from tradesim import config
-from tradesim.cli import app, progress, views
 from tradesim.database import read_games
 from tradesim.education import (academy, challenges, coach, diversification_lab, explainer,
                                 headline_lab, leverage_lab, robo_analyst, whatif)
+from tradesim.education import report as grading
 from tradesim.education.achievements import BADGES
 from tradesim.engine import analytics, margin
 from tradesim.engine.errors import TradeSimError
 from tradesim.engine.game import Game
 from tradesim.engine.intraday import Session, clock_text
+from tradesim.engine.regime import spells
 from tradesim.loader import load_challenges, load_glossary, load_quiz
 from tradesim.webapp.session import WebSession
 
@@ -45,19 +42,68 @@ def finite(value: float) -> float | None:
     return value if math.isfinite(value) else None
 
 
-def to_html(output: list) -> str:
-    """Draw the terminal's rich screens as HTML (used by the Terminal page and the report)."""
-    console = Console(record=True, width=config.WEB_WIDTH, file=io.StringIO(),
-                      color_system="truecolor", force_terminal=True)
-    for renderable in output:
-        console.print(renderable)
-    # MONOKAI: the terminal colours that read well on the page's dark background
-    return console.export_html(theme=MONOKAI, inline_styles=True, code_format='<pre class="rich">{code}</pre>')
+def fear_word(fear: float) -> str:
+    """'calm', 'uneasy', 'nervous' or 'panic' for a fear-gauge reading, like the real VIX bands."""
+    if fear < config.FEAR_CALM:
+        return "calm"
+    if fear < config.FEAR_UNEASY:
+        return "uneasy"
+    if fear < config.FEAR_PANIC:
+        return "nervous"
+    return "panic"
 
 
-def report_html(game: Game) -> str:
-    """The terminal's report (grade, goals, coach, the market's story) as HTML."""
-    return to_html(app.report_bundle(game))
+def tips(game: Game) -> list[dict]:
+    """The Trade Coach's tips about the session so far."""
+    return [{"severity": t.severity, "text": t.message} for t in coach.review_session(game)]
+
+
+def report(game: Game) -> dict:
+    """The report: grade, numbers, challenge goals, coach tips and (at the end) the market's story."""
+    market, account, prices = game.market, game.portfolio, game.current_prices()
+    index = market.index_symbol()
+    letter, verdict = grading.grade(game)
+    best_worst = grading.best_and_worst(game)
+    return {"over": game.is_over(), "day": game.day, "grade": letter, "verdict": verdict,
+            "start": account.starting_cash, "equity": account.equity(prices),
+            "return": account.total_return_pct(prices) / 100, "profit": account.total_pnl(prices) >= 0,
+            "index": index, "market_return": analytics.total_return(market.history(index, 0, game.day)),
+            "realised": account.realised_pnl, "unrealised": account.unrealised_pnl(prices),
+            "fees": account.fees_paid, "best": best_worst and best_worst[0],
+            "worst": best_worst and best_worst[1], "drawdown": analytics.max_drawdown(game.equity_history),
+            "trades": len(account.trades), "badges": len(game.badges),
+            "challenge": challenge_report(game), "tips": tips(game), "story": story(game)}
+
+
+def challenge_report(game: Game) -> dict | None:
+    """The goals of the current challenge and, once the game is over, whether they were met."""
+    checks = challenges.progress(game)
+    if not checks:
+        return None
+    return {"id": game.challenge.id, "title": str(game.challenge), "lesson": game.challenge.lesson,
+            "goals": [{"text": c.text, "now": c.now, "passed": c.passed} for c in checks],
+            "over": game.is_over(), "won": challenges.is_won(game), "final_day": game.market.num_days}
+
+
+def story(game: Game) -> dict | None:
+    """The market's hidden moods, day by day. Only shown once the game is over (they are revealed late)."""
+    if not game.is_over():
+        return None
+    market, index = game.market, game.market.index_symbol()
+    moods = market.regime_model.regimes
+    runs = spells(market.regime_path[:game.day + 1])
+    rows = []
+    for name, first, last in runs:
+        before = max(0, first - 1)          # measure from the close before the spell, so its first day counts
+        rows.append({"name": name, "emoji": moods[name].emoji, "label": moods[name].label,
+                     "first": first, "last": last,
+                     "move": market.price(index, last) / market.price(index, before) - 1})
+    seen = []                               # a list, not a set, so the explanations come out in one order
+    for name, _, _ in runs:
+        if name not in seen:
+            seen.append(name)
+    return {"index": index, "path": market.regime_path[:game.day + 1], "spells": rows,
+            "abouts": [{"emoji": moods[n].emoji, "text": moods[n].about} for n in seen]}
 
 
 def universe(game: Game) -> dict:
@@ -97,7 +143,7 @@ def clock(game: Game) -> dict:
             "shown_day": shown, "date": date_label(shown),
             "time": clock_text(game.tick) if game.is_open() else "16:00",
             "next_date": date_label(game.day + 1), "ticks": market.ticks_per_day,
-            "fear": round(fear, 1), "fear_word": views.fear_label(fear)[0], "seed": market.seed,
+            "fear": round(fear, 1), "fear_word": fear_word(fear), "seed": market.seed,
             "challenge": None if challenge is None else
             {"id": challenge.id, "title": challenge.title, "emoji": challenge.emoji,
              "goals": [{"text": c.text, "now": c.now, "passed": c.passed} for c in challenges.progress(game)]}}
@@ -239,7 +285,7 @@ def news(session: WebSession) -> list[dict]:
     rows = []
     for day in reversed(session.visible_news_days()):
         for event in market.events_on(day):
-            verdict = session.ai.cached(event.headline)
+            verdict = session.readings.get(event.headline)
             words = headline_lab.keyword_verdict(event.headline, session.words.positive_words,
                                                  session.words.negative_words)
             hit = explainer.affected_symbols(market, event)
@@ -247,7 +293,7 @@ def news(session: WebSession) -> list[dict]:
             rows.append({"day": day, "date": date_label(day), "time": clock_text(market.session(day).news_tick),
                          "headline": event.headline, "explanation": event.explanation, "scope": event.scope,
                          "target": event.target, "hit": hit,
-                         "ai": None if verdict is None else {"label": verdict.label, "confidence": verdict.confidence},
+                         "reading": None if verdict is None else {"label": verdict.label, "confidence": verdict.confidence},
                          "words": words.label,
                          "truth": headline_lab.truth(event) if closed else None,
                          "moves": [[s, market.daily_change_pct(s, day)] for s in hit[:6]] if closed else []})
@@ -271,7 +317,7 @@ def portfolio(game: Game) -> dict:
     return {"labels": [date_label(d) for d in range(len(curve))], "you": curve,
             "market": [start_cash * v / index_path[0] for v in index_path], "index": index,
             "sectors": sorted(exposure.items(), key=lambda pair: -pair[1]), "trades": trades,
-            "tips": [{"severity": t.severity, "text": t.message} for t in coach.review_session(game)]}
+            "tips": tips(game)}
 
 
 def leverage(game: Game, symbol: str) -> dict:
@@ -346,7 +392,7 @@ def learn(game: Game) -> dict:
 def challenge_list(game: Game) -> list[dict]:
     """Every challenge with its goals in words."""
     return [{"id": c.id, "title": c.title, "emoji": c.emoji, "intro": c.intro, "lesson": c.lesson,
-             "goals": [progress.goal_text(goal) for goal in c.goals], "start": c.start,
+             "goals": [challenges.goal_text(goal) for goal in c.goals], "start": c.start,
              "playing": game.challenge is not None and game.challenge.id == c.id}
             for c in load_challenges().values()]
 

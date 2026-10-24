@@ -10,14 +10,7 @@ DATA_DIR = PROJECT_ROOT / "data"
 REFERENCE_DB_PATH = DATA_DIR / "reference.db"
 PLAYER_DB_PATH = PROJECT_ROOT / "saves" / "player.db"
 DB_VERSION = 1                # stored in the player database; a different number means "start fresh"
-AGENT_SLOT = "agent"          # which game agent mode continues (--game NAME)
 WEB_SLOT = "web"              # the game the web app autosaves and resumes
-
-# Agent mode (X-06): one command per call, game kept in the player database
-AGENT_WIDTH = 100             # fixed width so agents always see the same table layout
-
-# Web app (Phase 5a, D-25)
-WEB_WIDTH = 100               # characters per line when rich screens are drawn as HTML
 
 # Web app v2 (D-37): a real web server + hand-written HTML/CSS/JS front end
 WEB_HOST = "127.0.0.1"        # localhost only: the game is for the player on this computer
@@ -123,26 +116,12 @@ DIP_TRIGGER = 0.02            # Buy-the-dip: the fund's daily fall that triggers
 DIP_TRANCHE = 0.20            # … investing 20% of starting cash each time
 DCA_INTERVAL_DAYS = 5         # Steady saver: invest every 5 days
 CHASE_EVERY_DAYS = 5          # Chase the winner: switch into last week's best stock every 5 days
-WHATIF_CHART_LINES = 4        # how many equity curves the chart shows
 
-# Charts and screens
-CHART_HEIGHT = 12
-CHART_WIDTH = 60
-SPARKLINE_DAYS = 10
-QUOTE_SPARK_DAYS = 30         # days in the sparkline on a company profile
-MA_WINDOW = 20                # moving-average length on charts
-MOVERS_SHOWN = 3              # best/worst stocks listed under the market table
 FEAR_CALM = 15                # fear gauge bands, like the real VIX: below 15 calm …
 FEAR_UNEASY = 22              # … below 22 uneasy …
 FEAR_PANIC = 30               # … below 30 nervous, above it panic
-BETA_AGGRESSIVE = 1.2         # beta above this is called "aggressive" …
-BETA_DEFENSIVE = 0.8          # … below this "defensive"
-STORY_REVEAL_LAG = 10         # the market's mood is revealed this many days late
 GRADE_SMALL_LOSS = -0.05      # report grade C down to a 5% loss, D below
 BEAT_MARGIN = 0.01            # "beating the market" needs at least 1 percentage point
-NEWS_MOVERS_SHOWN = 4         # a NEWS line lists at most this many of the stocks it hit
 
-# Headline Lab (E-05) — Laya runs locally, so no API key is needed (D-21)
-MODEL_DIR = PROJECT_ROOT / "models" / "laya"   # downloaded by tools/download_model.py (D-21)
-NEUTRAL_BAND = 0.60               # AI probability below this → shown dimmed as "unsure" (D-22)
+# Headline Lab (E-05)
 MAX_HEADLINE_LENGTH = 200

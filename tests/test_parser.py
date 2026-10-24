@@ -33,12 +33,12 @@ def test_blank_line_ignored():
 
 
 def test_aliases():
-    assert parse("pf") == Command("portfolio", [])
     assert parse("n 5") == Command("next", [5])
-    assert parse("? buy") == Command("help", ["buy"])
+    assert parse("b nvda 10") == Command("buy", ["NVDA", 10])
+    assert parse("lev 2") == Command("leverage", [2])
 
 
-@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "portfolio now", "next ³"])
+@pytest.mark.parametrize("line", ["next abc", "next -2", "next 1 2", "robo now", "next ³"])
 def test_bad_next_and_extra_args_rejected(line):
     with pytest.raises(CommandError):
         parse(line)
@@ -46,18 +46,20 @@ def test_bad_next_and_extra_args_rejected(line):
 
 def test_lab_variants():
     assert parse("lab") == Command("lab", [])
-    assert parse("lab ko") == Command("lab", ["KO"])
     assert parse("lab mc nvda") == Command("lab", ["MC", "NVDA"])
+    with pytest.raises(CommandError):
+        parse("lab mc nvda mix6")
 
 
 def test_headline_text_keeps_case_and_drops_quotes():
     assert parse('hl "Walmart sales not as bad as feared"') == \
         Command("headlines", ["Walmart sales not as bad as feared"])
-    assert parse("headlines") == Command("headlines", [])
+    with pytest.raises(CommandError, match="Usage: hl"):
+        parse("headlines")
 
 
 def test_empty_quoted_headline_shows_usage():
-    with pytest.raises(CommandError, match="Usage: headlines"):
+    with pytest.raises(CommandError, match="Usage: hl"):
         parse('hl ""')
 
 

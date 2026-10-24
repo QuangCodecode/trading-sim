@@ -13,10 +13,11 @@ import * as portfolio from './portfolio.js';
 import * as leverage from './leverage.js';
 import * as pages from './pages.js';
 import { startTutorial, tutorialDone } from './tutorial.js';
+import { reportHTML } from './report.js';
 
 const PAGES = {
   board, trade, portfolio, leverage, news: pages.news, labs: pages.labs, robo: pages.robo,
-  learn: pages.learn, challenges: pages.challenges, terminal: pages.terminal,
+  learn: pages.learn, challenges: pages.challenges,
 };
 const mounted = new Set();
 let current = null;
@@ -238,9 +239,9 @@ function closingBell(d) {
 
 /** The final report: grade, goals, coach tips and the market's hidden story. */
 export async function showReport() {
-  const { html } = await getJSON('/api/report');
+  const report = await getJSON('/api/report');
   openDialog({
-    title: '🏁 Your report', wide: true, body: `<div class="report">${html}</div>`,
+    title: '🏁 Your report', wide: true, body: `<div class="report">${reportHTML(report)}</div>`,
     foot: `<button class="btn" data-go="labs">What if I had…? (replay)</button>
            <button class="btn" data-go="challenges">Try a challenge</button>
            <button class="btn primary" data-new>New game</button>`,

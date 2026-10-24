@@ -19,15 +19,6 @@ from pathlib import Path
 from tradesim import config
 from tradesim.engine.errors import DataFileError, TradeSimError
 
-# AI labels for headlines. Both databases have this table: reference.db holds the ones shipped
-# with the game, player.db the ones for headlines the player typed (ai/sentiment.py).
-SENTIMENT_TABLE = """
-CREATE TABLE IF NOT EXISTS sentiment (
-    headline   TEXT PRIMARY KEY,
-    label      TEXT NOT NULL,
-    confidence REAL NOT NULL
-);
-"""
 
 # No PRIMARY KEY / FOREIGN KEY / CHECK on these tables on purpose: loader.py already checks
 # every rule (duplicate symbols, weights adding up to 1, ...) and raises a friendly DataFileError.
@@ -46,7 +37,9 @@ CREATE TABLE glossary (term TEXT, emoji TEXT, short TEXT, long TEXT, "try" TEXT)
 CREATE TABLE quiz_questions (question TEXT, options TEXT, answer INTEGER, "explain" TEXT);
 CREATE TABLE challenges (id TEXT, title TEXT, emoji TEXT, seed INTEGER, days INTEGER, intro TEXT,
                          goals TEXT, lesson TEXT, story TEXT, start TEXT);
-""" + SENTIMENT_TABLE
+-- the "sentence reader" labels of the Headline Lab: worked out once, stored as plain data (D-50)
+CREATE TABLE sentiment (headline TEXT PRIMARY KEY, label TEXT NOT NULL, confidence REAL NOT NULL);
+"""
 
 # A game is a seed plus the commands that changed it (D-08, D-26): prices are never stored.
 PLAYER_SCHEMA = f"""
@@ -68,7 +61,7 @@ CREATE TABLE badges (
     PRIMARY KEY (game_id, badge_id)
 );
 PRAGMA user_version = {config.DB_VERSION};
-""" + SENTIMENT_TABLE
+"""
 
 
 def connect(target: str, uri: bool = False) -> sqlite3.Connection:
@@ -161,8 +154,15 @@ def read_quiz(db: sqlite3.Connection) -> dict:
     return {"questions": questions}
 
 
+def read_sentiment(db: sqlite3.Connection) -> dict:
+    """{headline: {"label", "confidence"}}: the stored reading of each news headline."""
+    rows = db.execute("SELECT headline, label, confidence FROM sentiment ORDER BY rowid")
+    return {row["headline"]: {"label": row["label"], "confidence": row["confidence"]} for row in rows}
+
+
 SECTION_READERS = {"universe": read_universe, "events": read_events, "regimes": read_regimes,
-                   "challenges": read_challenges, "glossary": read_glossary, "quiz": read_quiz}
+                   "challenges": read_challenges, "glossary": read_glossary, "quiz": read_quiz,
+                   "sentiment": read_sentiment}
 
 
 def read_section(path: Path, name: str) -> dict:
@@ -179,8 +179,8 @@ def read_section(path: Path, name: str) -> dict:
 def write_reference(path: Path, sections: dict) -> None:
     """Create a fresh reference database from dicts shaped like the old JSON files.
 
-    `sections` may hold any of the SECTION_READERS names, plus "sentiment"
-    ({headline: {"label", "confidence"}}). A missing part is simply left empty.
+    `sections` may hold any of the SECTION_READERS names ("sentiment" is
+    {headline: {"label", "confidence"}}). A missing part is simply left empty.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.unlink(missing_ok=True)

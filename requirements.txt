@@ -1,2 +1,2 @@
-rich>=13
-laya>=0.4
+# TradeSim needs no packages: Python 3.11+ and a web browser are enough (D-50).
+# Tests and the screenshot tool: pip install -r requirements-dev.txt

@@ -17,19 +17,9 @@ from tradesim.webapp import api, server
 from tradesim.webapp.session import WebSession
 
 
-class FakeAI:
-    """Never loads Laya: no cached answers, no classifier."""
-
-    def cached(self, headline):
-        return None
-
-    def classify(self, headline):
-        return None
-
-
 @pytest.fixture
 def session():
-    return WebSession(42, 60, ai=FakeAI())
+    return WebSession(42, 60)
 
 
 def kinds(session, since=0):
@@ -129,7 +119,39 @@ def test_pages_build(session):
     assert api.learn(session.game)["quiz"]["options"]
     assert any(c["id"] == "margin" for c in api.challenge_list(session.game))
     assert all(n["truth"] for n in api.news(session))   # every headline so far has closed
-    assert "Final report" in api.report_html(session.game) or "report" in api.report_html(session.game).lower()
+    report = api.report(session.game)
+    assert report["grade"] and report["story"] is None and report["trades"] == 1    # the story waits for the end
+    json.dumps(report)
+
+
+def test_the_report_at_the_end_carries_the_markets_story(session):
+    session.run("buy MKT100 10")
+    session.run("next 60")
+    report = api.report(session.game)
+    story = report["story"]
+    assert report["over"] and len(story["path"]) == 61
+    assert story["spells"][0]["first"] == 0 and story["spells"][-1]["last"] == 60
+    assert report["challenge"] is None and "finisher" in session.game.badges and report["badges"] >= 2
+    json.dumps(report)
+
+
+def test_a_challenge_report_lists_its_goals(session):
+    session.run("challenge bull")
+    session.run("next 60")
+    challenge = api.report(session.game)["challenge"]
+    assert challenge["over"] and challenge["goals"] and challenge["lesson"]
+
+
+def test_news_carries_the_stored_reading_of_each_headline(session):
+    session.run("next 30")
+    items = api.news(session)
+    assert items and all(n["reading"]["label"] in ("positive", "negative") for n in items)
+
+
+def test_looking_at_a_page_earns_its_badge_and_a_toast(session):
+    session.run("robo")
+    notice = next(n for n in session.notices_since(0) if n["kind"] == "badge")
+    assert "Robo" in notice["title"]
 
 
 def test_what_if_needs_a_day(session):
@@ -184,9 +206,11 @@ def test_every_id_the_app_shell_looks_up_is_in_the_page():
 
 
 def test_server_runs_commands_and_ticks(base_url, session):
-    status, body = call(base_url + "/api/command", {"line": "buy NVDA 2", "html": True})
+    status, body = call(base_url + "/api/command", {"line": "buy NVDA 2"})
     reply = json.loads(body)
-    assert status == 200 and reply["ok"] and "Bought" in reply["html"] and reply["positions"]
+    assert status == 200 and reply["ok"] and reply["result"] is None and reply["positions"]
+    status, body = call(base_url + "/api/command", {"line": "quiz a"})
+    assert set(json.loads(body)["result"]) >= {"correct", "answer", "explain"}
     status, body = call(base_url + "/api/tick", {"ticks": 3})
     assert status == 200 and json.loads(body)["clock"]["tick"] == 3
 
@@ -222,7 +246,7 @@ def test_server_hides_everything_outside_static(base_url):
 # ---------------------------------------------------------------- saved games (D-46)
 
 def saved_session(db, seed=None, days=60):
-    return WebSession(seed, days, ai=FakeAI(), db_path=db)
+    return WebSession(seed, days, db_path=db)
 
 
 def test_game_is_resumed_after_a_restart(tmp_path):

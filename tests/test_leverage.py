@@ -50,21 +50,21 @@ def test_risk_table():
     assert table[1] == (2, 0.25, pytest.approx(1 / 3), 0.5)
 
 
-def test_leverage_command_shows_and_sets():
+def test_leverage_command_sets_the_limit():
     game = app.new_game(42, 60)
-    assert app.execute(game, "leverage")
+    app.execute(game, "leverage")                  # a bare `leverage` changes nothing
+    assert game.portfolio.max_leverage == 1
     app.execute(game, "leverage 2")
     assert game.portfolio.max_leverage == 2
     with pytest.raises(TradeSimError, match="between 1 and"):
         app.execute(game, "leverage 9")
 
 
-def test_leveraged_buy_borrows_and_the_coach_warns():
+def test_leveraged_buy_borrows():
     game = app.new_game(42, 60)
     app.execute(game, "leverage 2")
-    output = app.execute(game, "buy MKT100 max")
+    app.execute(game, "buy MKT100 max")
     assert game.portfolio.loan() > 0
-    assert any("borrowing" in str(getattr(line, "plain", line)) for line in output)
     assert "borrower" in game.badges
 
 
@@ -78,24 +78,10 @@ def test_tick_command_runs_the_session():
     assert (game.day, game.tick) == (1, 0)
 
 
-def test_levlab_works_from_day_0_thanks_to_the_history():
+def test_visiting_the_leverage_lab_earns_its_badge():
     game = app.new_game(42, 60)
-    assert app.execute(game, "levlab")
-    assert app.execute(game, "levlab NVDA") and "lev_lab" in game.badges
-
-
-def test_levlab_needs_days_without_history(game):
-    with pytest.raises(TradeSimError, match="Play a few days"):
-        app.execute(game, "levlab FUND")
-
-
-def test_market_filters_by_sector():
-    game = app.new_game(42, 60)
-    assert app.pick_symbols(game, "real") == [s for s, st in game.market.stocks.items()
-                                              if st.sector == "Real Estate"]
-    assert app.pick_symbols(game, "etf") == list(game.market.etfs)
-    with pytest.raises(TradeSimError, match="No sector"):
-        app.execute(game, "market spaceships")
+    app.execute(game, "levlab")
+    assert "lev_lab" in game.badges
 
 
 def test_margin_madness_punishes_doing_nothing():

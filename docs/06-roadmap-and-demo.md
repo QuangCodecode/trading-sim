@@ -1,5 +1,8 @@
 # 06 — Roadmap, demo plan and scoring checklist
 
+> **D-50 (2026-10-24):** the project is now standard library only and web only (see Phase 11). Older phases below that mention
+> the REPL, agent mode, `rich` or Laya describe what was built at the time.
+
 ## 6.1 Timeline (adjust to the real teaching calendar)
 
 Now ≈ late September (around Week 8). Final project due **Week 12**; **Assignment 2 is
@@ -123,10 +126,17 @@ a working version early and upgrade it.
 - [x] Q-08: the old Streamlit app (`tradesim/web/`, `web.py`, `.streamlit/`, `tests/test_web.py`, the `streamlit` dependency) was deleted (D-45)
 
 ### Phase 10 — First-run tutorial (D-49, 2026-10-24)
-- [x] `tutorial.js` + `tutorial-steps.js` + CSS: 36 steps, unskippable first run, task-gated game walkthrough, Tour button replay
+- [x] `tutorial.js` + `tutorial-steps.js` + CSS: 35 steps (36 before the Terminal page went), unskippable first run, task-gated game walkthrough, Tour button replay
 - [x] Tests: every JS import path and every id looked up by `app.js`/`tutorial.js` exists (`test_webapp.py`)
 - [x] Verified in headless Chrome: all selectors resolve, Next locked until each task is done, closing bell hides the card, lock blocks clicks and keys, reload resumes, finish and replay
 - [ ] Demo day: decide whether to show the tutorial live (replay with **Tour**) or clear `localStorage` first
+
+### Phase 11 — Standard library only, web only (D-50, 2026-10-24)
+- [x] `rich` and `laya` removed; `pyproject.toml` has no runtime dependencies; `tests/test_stdlib_only.py` guards it
+- [x] Terminal game, agent mode and the web Terminal page removed (`cli/views.py`, `insights.py`, `progress.py`, `charts.py`, `agent.py`, `tools/verify.py cli`)
+- [x] Headline Lab keeps Laya's 84 labels as stored data; the six "look" badges come from visit commands
+- [x] Report, quiz feedback, Monte Carlo and headline test drawn from JSON by JS (`static/js/report.js`)
+- [x] Verified: a blank venv starts the server; headless Chrome drive of News, Labs, Learn, final report (free play and challenge); old `player.db` still loads
 
 ### Phase 7 — Polish & submit
 - [x] `tools/find_demo_seed.py`: early tech shock (NVDA ≤ −6%, MIX6 > −3%), a later bear/crash,
@@ -140,11 +150,10 @@ a working version early and upgrade it.
 
 ## 6.3 Three-minute demo script (updated for D-37…D-43)
 
-Start the web app on the demo market: `uv run main.py --web --seed 39` (opens
+Start the web app on the demo market: `python3 main.py --seed 39` (opens
 `http://127.0.0.1:8000`). Seed 39: sideways start, a **bear market days 6–22**, and on **day 14
 at 13:10 "Chip export curbs hit tech stocks"** → NVDA −10.3%, MIX6 only −2.9%.
-Browser zoom 100–110%. Backup: a screen recording of the same run, plus the REPL
-(`uv run main.py --seed 39`).
+Browser zoom 100–110%. Backup: a screen recording of the same run.
 
 | Time | Say | Do |
 |---|---|---|
@@ -152,12 +161,11 @@ Browser zoom 100–110%. Backup: a screen recording of the same run, plus the RE
 | 0:20–0:45 | "Double-click to trade. I'll put half my money in NVIDIA…" | Double-click NVDA → 50% → Buy; toast + coach tip |
 | 0:45–1:10 | "Candlesticks with six months of history — this is what traders look at." | Trade page: 1D live candles, then All + MA 20/50, hover the tooltip |
 | 1:10–1:35 | "Now the dangerous part: borrowing. At 3× leverage, a 20% fall triggers a margin call — the broker sells for you." | Leverage page: 3× → calculator −10% at 3× = −30%; Leverage Lab chart with the margin-call dot |
-| 1:35–2:00 | "Let's skip ahead…" (Skip 5 days ×2, then play day 14 at 15×) "Breaking news at 13:10 — NVIDIA −10%. The ETF? Under 3%." | Skip days, 15× → breaking-news toast; News page: Laya vs keywords vs truth |
+| 1:35–2:00 | "Let's skip ahead…" (Skip 5 days ×2, then play day 14 at 15×) "Breaking news at 13:10 — NVIDIA −10%. The ETF? Under 3%." | Skip days, 15× → breaking-news toast; News page: sentence reader vs keywords vs truth |
 | 2:00–2:25 | "Same stock, 200 different markets: one stock loses 20%+ far more often than the ETF." | Labs → Monte Carlo (or Diversification) |
 | 2:25–2:45 | "Skip to the end: the report, the hidden story, and what eleven other strategies would have done." | Skip to the end → report → What-if |
-| 2:45–3:00 | "Standard-library Python server, hand-drawn charts, a local AI, a hand-written ML model, 314 tests. Lesson: diversify, and be very careful with borrowed money." | `uv run pytest -q` summary |
+| 2:45–3:00 | "Standard-library Python server, hand-drawn charts, a hand-written ML model, nothing to install. Lesson: diversify, and be very careful with borrowed money." | `uv run pytest -q` summary |
 
-Optional 10 s beat: a script playing through agent mode (`uv run main.py tick 6`, `leverage 2`, `buy …`).
 
 ## 6.4 Scoring checklist (map features → what markers look for)
 
@@ -173,10 +181,10 @@ it here. Until then, cover every learning outcome visibly:
 | LO8 Array/list idioms | Price histories, list comprehensions, 2D character grid in `charts.py`, sliding windows in coach rules |
 | LO9 Testing | pytest suite, worked-example tests, invariant test, replay-fidelity test, coverage report |
 | LO10 Debugging | Custom exception tree, friendly errors, `docs/debug-log.md` (symptom → traceback → cause → fix → test added) |
-| LO11 Docs & stdlib | `random`, `statistics`, `json`, `argparse`, `pathlib`, `difflib`, `math`, `urllib`, `os`; two well-used libraries (`rich`, `textual`); one external API (Jev) behind a cache |
+| LO11 Docs & stdlib | `random`, `statistics`, `json`, `argparse`, `pathlib`, `difflib`, `math`, `urllib`, `os`; no third-party libraries at all (D-50) |
 | Week 7 OOP | Classes with constructors, instance vs **class variable** (e.g. `Trade._next_id` counter for trade IDs), `@staticmethod` (`Market.from_prices`), one class per file, driver file `main.py` |
 | Originality (instructor condition) | Diversification Lab + Explainer + Coach + What-if + Headline Lab — framed as "teaches *why*", not just "lets you trade" |
-| Demo appeal (class vote) | Dramatic seed, a live broker-style price board and candlestick charts (own web app), leverage and margin calls, an AI agent playing via agent mode, AI headline reading, a clear one-sentence lesson |
+| Demo appeal (class vote) | Dramatic seed, a live broker-style price board and candlestick charts (own web app), leverage and margin calls, stored AI headline readings, a clear one-sentence lesson |
 
 `docs/debug-log.md` entry template:
 

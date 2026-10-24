@@ -1,10 +1,10 @@
 """The web app's HTTP server (D-37), built only from the standard library.
 
-    uv run main.py --web            then open http://127.0.0.1:8000
+    python3 main.py                 then open http://127.0.0.1:8000
 
 GET  /                  the page (static/index.html, which loads static/css + static/js)
 GET  /api/<name>?…      read-only JSON built by webapp/api.py (/api/games lists the saved games)
-POST /api/command       {"line": "buy NVDA 10"} → runs it like a terminal player would
+POST /api/command       {"line": "buy NVDA 10"} → runs that command; the reply may carry a "result"
 POST /api/tick          {"ticks": 1} → lets the live session run (the page's clock)
 
 One player, one game, one thread: requests are answered one at a time, so the game is
@@ -57,15 +57,14 @@ GET_ROUTES = {
     "/api/learn": lambda s, p: api.learn(s.game),
     "/api/challenges": lambda s, p: {"challenges": api.challenge_list(s.game)},
     "/api/games": lambda s, p: api.games(s),
-    "/api/report": lambda s, p: {"html": api.report_html(s.game)},
+    "/api/report": lambda s, p: api.report(s.game),
 }
 
 
 def post_command(session: WebSession, body: dict) -> dict:
-    """Run one command line; the reply carries its terminal output as HTML."""
+    """Run one command line; the reply carries its result (quiz marking, Monte Carlo…), if it has one."""
     line = str(body.get("line", "")).strip()[:MAX_LINE]
-    output = session.run(line)
-    return {"ok": True, "html": api.to_html(output) if body.get("html") else ""}
+    return {"ok": True, "result": session.run(line)}
 
 
 def post_tick(session: WebSession, body: dict) -> dict:

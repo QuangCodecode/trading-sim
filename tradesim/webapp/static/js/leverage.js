@@ -2,7 +2,7 @@
 // a calculator to feel the maths, and the Leverage Lab replaying this market with 1×–5×.
 
 import { getJSON } from './api.js';
-import { run } from './actions.js';
+import { run, visit } from './actions.js';
 import { store, onState } from './store.js';
 import { money, pct, direction, esc } from './fmt.js';
 import { LineChart, chartBox } from './chart.js';
@@ -72,6 +72,7 @@ export function mount(el) {
 }
 
 export function show() {
+  visit('levlab');
   labSymbol ||= store.universe.index;
   section.querySelector('[data-f="lab-symbol"]').value = labSymbol;
   drawAccount();

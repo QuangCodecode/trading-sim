@@ -46,7 +46,7 @@ really does to you.
   safety-cushion bar, **margin calls** that sell for you, a "what does a move do to my money?"
   calculator, and the **Leverage Lab**: the same 60 days at 1×, 2×, 3×, 5× and in a 2× daily fund
 - **Diversification Lab** — one stock vs an ETF on the same days, plus a 200-market Monte Carlo
-- **News + Headline Lab (AI)** — every headline, a local AI (Laya, offline) vs a keyword counter vs what really happened
+- **News + Headline Lab** — every headline: a stored "sentence reader" label vs a keyword counter vs what really happened, plus a box to test your own headline
 - **Trade Coach** — tips after each trade: concentration, panic selling, chasing, fees, borrowing
 - **What-if Replay** — the same market replayed with 11 strategies, including yours
 - **Robo-analyst (tiny ML)** — two logistic regressions in plain Python: a mood detector (≈ 85%)
@@ -54,58 +54,34 @@ really does to you.
 - **Academy** — a 33-term glossary and a 21-question quiz; **9 challenges** (Survive the Crash,
   Margin Madness, Borrowed Bull, …) and **20 badges**
 
-**Three ways to play** — one game engine, the same commands everywhere
-- **Browser** — `uv run main.py --web`: the live price board, charts, trading, labs
-- **Terminal** — `uv run main.py --seed 42`: the coloured REPL (`tick`, `leverage`, `levlab` work there too)
-- **Your AI agent** — `uv run main.py buy NVDA 20`: one command per call, plain text
+**One way to play — in your browser, with nothing to install**
+- You need **Python 3.11+** and a **web browser**. No packages, no downloads, no internet:
+  the game is the Python standard library plus plain HTML/CSS/JavaScript
 
 ## Quick start
 
 ```bash
-uv run main.py --web                 # browser → http://127.0.0.1:8000  (add --seed 39 for the demo market)
-uv run main.py --seed 42             # terminal
-uv run pytest                        # 346 tests
+python3 main.py                      # then open http://127.0.0.1:8000  (it opens a tab for you)
+python3 main.py --seed 39            # a fresh game on the demo market (a crash and a recovery)
 ```
-Optional, once: `uv run tools/download_model.py` (Laya AI weights, ~808 MB). Without it the
-Headline Lab uses the saved answers in `data/reference.db`.
-
-Without uv: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt -r requirements-dev.txt`,
-then `python3 main.py --web`.
+Developers: `uv run pytest` runs the tests (uses `pytest`, a dev-only tool; without uv:
+`pip install -r requirements-dev.txt`, then `pytest`).
 
 **First game in the browser:** press **▶ Open the market** → double-click NVDA on the board →
 Buy 50% → watch it tick → **To close ⏭** → read the closing bell → try the **Leverage** page.
-In the terminal: `market tech` → `buy MIX6 max` → `tick 12` → `next 5` → `leverage 2` → `levlab`.
 
 **Where the data lives (SQLite):** `data/reference.db` is the game's content (stocks, ETFs, news,
-market moods, glossary, quiz, challenges, Laya labels). It is committed, and the game opens it
+market moods, glossary, quiz, challenges, headline readings). It is committed, and the game opens it
 read-only; edit it with `sqlite3 data/reference.db`. `saves/player.db` holds your games (git-ignored):
 the web app resumes your last unfinished game when you restart it (`--seed` starts a fresh one).
-Type `games` in any front end to see your results and badges.
-
-## Let your AI agent play
-
-```bash
-uv run main.py --seed 42 market   # first call starts a seed-42 game in saves/player.db
-uv run main.py buy NVDA 20
-uv run main.py next 5
-uv run main.py challenge crash    # or start a challenge
-uv run main.py new                # start over (or --game NAME for a second game)
-uv run main.py games              # your saved games, results and badges
-```
-
-> Play TradeSim, a stock-trading simulator, in this folder. Run `uv run main.py help` for the
-> commands, then `uv run main.py --seed 42 market` to start. Run one command per call. Try to
-> finish day 60 ahead of the MKT100 index, and explain each decision before you make it.
 
 ## Tools
 
 | Command | What it does |
 |---|---|
 | `uv run tools/train_robo.py` | Retrain the Robo-analyst (after changing the price model) |
-| `uv run tools/warm_cache.py` | Label new news headlines (the `event_templates` table) with Laya |
 | `uv run tools/find_demo_seed.py` | Find a dramatic market for the demo (seed 39) |
-| `uv run tools/verify.py cli` | Play a fixed 45-step script through agent mode → `verify-out/cli.txt` |
-| `uv run tools/verify.py web` | Start the web app on port 8599 (seed 42) for browser checks |
+| `uv run tools/verify.py` | Start the web app on port 8599 (seed 42) for browser checks |
 
 ## Documentation
 
@@ -122,7 +98,8 @@ uv run main.py games              # your saved games, results and badges
 
 ## Status
 
-Phases 1–5, 8 and 9 done (core, labs, news, coach, what-if, Headline Lab, agent mode, real-life
+Phases 1–5, 8 and 9 done (core, labs, news, coach, what-if, Headline Lab, real-life
 trends, Robo-analyst, academy, challenges, badges, **the live web app with 100 stocks, candlesticks
 and leverage**). Left: Phase 7 polish and the demo. The old Streamlit front end was
-removed in favour of `main.py --web` (D-37, D-45).
+removed in favour of the web app (D-37, D-45). Since D-50 the project is **standard library only**
+and web only: `rich`, the Laya AI model and the terminal front ends were removed.

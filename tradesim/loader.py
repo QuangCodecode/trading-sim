@@ -9,6 +9,7 @@ from pathlib import Path
 from tradesim import config
 from tradesim.database import read_section
 from tradesim.education.challenges import Challenge
+from tradesim.education.headline_lab import Verdict
 from tradesim.education.robo_analyst import RoboAnalyst
 from tradesim.engine.errors import DataFileError
 from tradesim.engine.etf import ETF
@@ -17,6 +18,7 @@ from tradesim.engine.regime import Regime, RegimeModel
 from tradesim.engine.stock import Stock
 
 WEIGHT_TOLERANCE = 1e-9
+STORED_SOURCE = "stored"
 
 
 def read_json(path: Path) -> dict:
@@ -100,6 +102,16 @@ def load_events(stocks: dict[str, Stock], path: Path = config.REFERENCE_DB_PATH)
         for template in data["templates"]:
             _check_template(template, stocks)
         return EventCatalogue(data["templates"], data["positive_words"], data["negative_words"])
+    except (KeyError, TypeError) as error:
+        raise DataFileError(f"{path} has a missing or bad field: {error}")
+
+
+def load_readings(path: Path = config.REFERENCE_DB_PATH) -> dict[str, Verdict]:
+    """The stored "sentence reader" verdict of every shipped headline (worked out once, kept as data)."""
+    data = read_section(path, "sentiment")
+    try:
+        return {headline: Verdict(row["label"], row["confidence"], STORED_SOURCE)
+                for headline, row in data.items()}
     except (KeyError, TypeError) as error:
         raise DataFileError(f"{path} has a missing or bad field: {error}")
 

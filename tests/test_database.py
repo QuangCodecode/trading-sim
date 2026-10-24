@@ -78,7 +78,7 @@ def test_player_database_is_created_with_its_tables_and_foreign_keys(tmp_path):
     path = tmp_path / "deep" / "folder" / "player.db"
     with closing(open_player(path)) as db:
         names = {row["name"] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-        assert {"games", "commands", "badges", "sentiment"} <= names
+        assert {"games", "commands", "badges"} <= names
         with pytest.raises(sqlite3.IntegrityError):                       # no such game
             db.execute("INSERT INTO commands VALUES (99, 0, 'next')")
 

@@ -46,7 +46,7 @@ def test_the_summary_row_follows_the_game(path):
     assert row["day"] == 2 and row["over"] == 0 and row["passed"] is None
     assert row["equity"] == pytest.approx(game.equity())
     assert row["fees"] == pytest.approx(game.portfolio.fees_paid)
-    assert (row["quiz_right"], row["quiz_answered"]) == app.quiz_score(game)
+    assert (row["quiz_right"], row["quiz_answered"]) == (sum(game.quiz_results), len(game.quiz_results))
 
 
 def test_badges_are_kept_once_each(path):

@@ -88,3 +88,16 @@ def is_won(game: Game) -> bool:
     """True once the challenge is over and every goal passed."""
     checks = progress(game)
     return game.is_over() and bool(checks) and all(check.passed for check in checks)
+
+
+def goal_text(goal: dict) -> str:
+    """A goal's wording without needing a game (used in the challenge list)."""
+    kind, value = goal["type"], goal.get("value")
+    words = {"min_equity": f"Finish ≥ ${value:,.0f}" if value is not None else "",
+             "min_return": f"Return ≥ {value:+.0%}" if value is not None else "",
+             "beat": f"Beat {goal.get('symbol')}",
+             "max_fees": f"Fees ≤ ${value:,.0f}" if value is not None else "",
+             "max_drawdown": f"Max drop ≤ {value:.0%}" if value is not None else "",
+             "min_invested": f"≥ {value:.0%} invested" if value is not None else "",
+             "no_margin_call": "No margin call"}
+    return words.get(kind, kind)
