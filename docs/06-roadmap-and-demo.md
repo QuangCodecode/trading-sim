@@ -122,6 +122,12 @@ a working version early and upgrade it.
 - [x] Verified: `tools/verify.py cli` (45 steps) and Chrome on every page, a margin-call game to the final report
 - [x] Q-08: the old Streamlit app (`tradesim/web/`, `web.py`, `.streamlit/`, `tests/test_web.py`, the `streamlit` dependency) was deleted (D-45)
 
+### Phase 10 — First-run tutorial (D-49, 2026-10-24)
+- [x] `tutorial.js` + `tutorial-steps.js` + CSS: 36 steps, unskippable first run, task-gated game walkthrough, Tour button replay
+- [x] Tests: every JS import path and every id looked up by `app.js`/`tutorial.js` exists (`test_webapp.py`)
+- [x] Verified in headless Chrome: all selectors resolve, Next locked until each task is done, closing bell hides the card, lock blocks clicks and keys, reload resumes, finish and replay
+- [ ] Demo day: decide whether to show the tutorial live (replay with **Tour**) or clear `localStorage` first
+
 ### Phase 7 — Polish & submit
 - [x] `tools/find_demo_seed.py`: early tech shock (NVDA ≤ −6%, MIX6 > −3%), a later bear/crash,
       ≥ 8 headlines, NVDA drawdown > 18% → **seed 39** (was 180 before D-38)

@@ -338,6 +338,13 @@ Modelled on a Vietnamese broker's price board: dark, dense, colour-coded, live.
 - **Errors**: rule breaks (`TradeSimError`) → HTTP 400 with the friendly message → a red toast (or a
   red line in the Terminal). Bad JSON, out-of-range ticks, unknown paths → 400/404; a bug → 500 and
   the traceback in the server's terminal; the server never stops.
+- **Tutorial (D-49)**: the first visit opens a required, 36-step tutorial (part 1 the screen, part 2 the ten
+  pages, part 3 a guided first game). It lights up one part of the page with a card beside it; the rest of the
+  page is `inert`. In part 3 *Next* unlocks only when the game shows the task is done (market open, speed 5×,
+  paused, NVDA bought, day closed, NVDA sold, days skipped). A pop-up (the closing bell) hides the card until
+  it is closed. Reload resumes at the furthest step; the last card keeps the game or starts a fresh one. The
+  sidebar **Tour** button replays it (closable, nothing enforced). Dev tools: set `localStorage.tradesim.tutorial`
+  to `done` to skip it, or `tradesim.tutorial.step` to `35` to jump to the last card.
 - **Safety**: listens on 127.0.0.1 only; static files only from `webapp/static/` (no `..`); request
   bodies ≤ 10 KB; command lines ≤ 300 characters.
 

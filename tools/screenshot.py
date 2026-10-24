@@ -1,9 +1,11 @@
 """Screenshot the web app with headless Google Chrome.
 
     uv run tools/verify.py web                       # in another terminal (port 8599)
-    uv run tools/screenshot.py verify-out/shots "goto http://127.0.0.1:8599/" "click Open the market" \\
+    uv run tools/screenshot.py verify-out/shots "goto http://127.0.0.1:8599/" \\
+        "eval localStorage.setItem('tradesim.tutorial','done')" "goto http://127.0.0.1:8599/" "click Open day 1" \\
         "wait 3" "shot board" "nav trade/NVDA" "wait 1" "shot trade"
 
+A fresh Chrome profile shows the required tutorial (D-49): set its flag first, as above.
 Steps: goto URL · nav PAGE (the #hash route, e.g. leverage or trade/NVDA) · click BUTTON TEXT ·
 clickcss SELECTOR · focus SELECTOR · type TEXT · enter · scroll PIXELS · top · wait SECONDS ·
 eval JS · shot NAME

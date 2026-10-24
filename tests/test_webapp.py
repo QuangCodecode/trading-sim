@@ -1,6 +1,7 @@
 """The web app (D-37): the session's notices, the JSON builders and the HTTP server."""
 
 import json
+import re
 import threading
 import urllib.error
 import urllib.request
@@ -165,6 +166,21 @@ def test_server_serves_the_page_and_state(base_url):
     assert status == 200 and b"TradeSim" in page
     status, body = call(base_url + "/api/state?since=0")
     assert status == 200 and json.loads(body)["clock"]["day"] == 0
+
+
+def test_every_javascript_import_exists():
+    """The page is plain ES modules: one wrong import path blanks the whole app, and no other test would notice."""
+    for path in (server.STATIC_DIR / "js").glob("*.js"):
+        for name in re.findall(r"from '\./([\w-]+\.js)'", path.read_text()):
+            assert (server.STATIC_DIR / "js" / name).is_file(), f"{path.name} imports the missing {name}"
+
+
+def test_every_id_the_app_shell_looks_up_is_in_the_page():
+    """app.js and tutorial.js wire buttons by id at start-up; a missing one would stop the page from loading."""
+    page = (server.STATIC_DIR / "index.html").read_text()
+    for name in ("app.js", "tutorial.js"):
+        for element_id in re.findall(r"getElementById\('([\w-]+)'\)", (server.STATIC_DIR / "js" / name).read_text()):
+            assert f'id="{element_id}"' in page, f"{name} looks up #{element_id}, which index.html lacks"
 
 
 def test_server_runs_commands_and_ticks(base_url, session):

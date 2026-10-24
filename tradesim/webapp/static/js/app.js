@@ -12,6 +12,7 @@ import * as trade from './trade.js';
 import * as portfolio from './portfolio.js';
 import * as leverage from './leverage.js';
 import * as pages from './pages.js';
+import { startTutorial, tutorialDone } from './tutorial.js';
 
 const PAGES = {
   board, trade, portfolio, leverage, news: pages.news, labs: pages.labs, robo: pages.robo,
@@ -36,7 +37,7 @@ async function boot() {
   setState(first);
   window.addEventListener('hashchange', route);
   route();
-  if (!localStorage.getItem('tradesim.welcomed')) welcome();
+  if (!tutorialDone()) startTutorial({ setRunning });   // the first visit: a tutorial that cannot be skipped
 }
 
 // ---------- pages ----------
@@ -108,6 +109,7 @@ function wireControls() {
     setRunning(false);
     await run(`next ${b.dataset.skip}`);
   }));
+  document.getElementById('btn-tutorial').addEventListener('click', () => startTutorial({ replay: true, setRunning }));
   document.addEventListener('keydown', (e) => {
     if (e.code !== 'Space' || e.target.closest('input, textarea, select, button, dialog')) return;
     e.preventDefault();
@@ -245,28 +247,6 @@ export async function showReport() {
     onOpen: (dialog) => {
       dialog.querySelectorAll('[data-go]').forEach((b) => b.addEventListener('click', () => { closeDialog(); location.hash = `#${b.dataset.go}`; }));
       dialog.querySelector('[data-new]').addEventListener('click', async () => { closeDialog(); await run('new'); });
-    },
-  });
-}
-
-function welcome() {
-  openDialog({
-    title: '👋 Welcome to TradeSim',
-    body: `<p>You have <b>$10,000</b> of pretend money and a market of <b>100 companies in 10 sectors</b> plus ETFs.
-      Prices are simulated but move like the real thing: good and bad moods, crashes, news, busy opens and closes.</p>
-      <ol class="welcome-steps">
-        <li><b>Open the market.</b> The day runs from 09:30 to 16:00; every second is 5 minutes (speed it up with 2×–15×).</li>
-        <li><b>Trade live.</b> Double-click any row on the board (or press B) to buy. Green ▲ = above yesterday's close, red ▼ = below.</li>
-        <li><b>Skip ahead</b> when you're done: finish the day or jump 5 or 20 days.</li>
-        <li><b>Learn the risks.</b> The <b>Leverage</b> page shows what borrowing does to your money, and Labs, Robo and Learn explain the rest.</li>
-      </ol>
-      <p class="muted">Prices are simulated. This is a learning game, not financial advice.</p>`,
-    foot: '<button class="btn" data-tour>Show me leverage first</button><button class="btn primary big" data-start>▶ Open the market</button>',
-    onOpen: (dialog) => {
-      localStorage.setItem('tradesim.welcomed', '1');
-      dialog.querySelector('[data-start]').addEventListener('click', () => { closeDialog(); setRunning(true); });
-      dialog.querySelector('[data-tour]').addEventListener('click', () => { closeDialog(); location.hash = '#leverage'; });
-      dialog.querySelector('[data-start]').focus();
     },
   });
 }

@@ -122,10 +122,11 @@ main { grid-area: main; overflow: auto; min-width: 0; position: relative; }
 .account-chip .sub { font-size: 11.5px; }
 
 /* ---------- side nav ---------- */
-.sidenav a { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px; color: var(--text-secondary);
+.sidenav a, .sidenav button { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 9px 4px; color: var(--text-secondary);
              font-size: 10.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; border-left: 3px solid transparent; text-align: center; }
-.sidenav a svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.sidenav a:hover { color: var(--text-primary); background: var(--surface-2); }
+.sidenav button { background: none; border: 0; border-left: 3px solid transparent; cursor: pointer; margin-top: auto; }
+.sidenav a svg, .sidenav button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.sidenav a:hover, .sidenav button:hover { color: var(--text-primary); background: var(--surface-2); }
 .sidenav a[aria-current="page"] { color: var(--accent); border-left-color: var(--accent); background: var(--surface-2); }
 .sidenav .kbd { font-size: 9px; color: var(--text-muted); border: 1px solid var(--border); border-radius: 3px; padding: 0 3px; }
 .sidenav .new { color: var(--warn); font-size: 9px; }
@@ -350,6 +351,29 @@ dialog::backdrop { background: rgba(4, 6, 8, 0.7); backdrop-filter: blur(2px); }
 .ticker { flex: 1; overflow: hidden; min-width: 0; color: var(--text-secondary); }
 .ticker span { display: inline-block; padding-left: 100%; animation: ticker 40s linear infinite; }
 @keyframes ticker { to { transform: translateX(-100%); } }
+
+/* ---------- tutorial ---------- */
+.tour { position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden; }
+.tour.plain { background: rgba(4, 6, 8, 0.72); }          /* nothing lit up: dim the whole page */
+.tour-spot { position: fixed; border: 2px solid var(--accent); border-radius: var(--radius-lg); pointer-events: none;
+             box-shadow: 0 0 0 100vmax rgba(4, 6, 8, 0.72), 0 0 18px 2px rgba(57, 135, 229, 0.55); }   /* the shadow dims everything outside */
+.tour-card { position: fixed; left: 0; top: 0; width: 360px; max-width: calc(100vw - 28px); pointer-events: auto; outline: none;
+             background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+             transition: left 0.2s ease, top 0.2s ease; }
+.tour-bar { height: 3px; background: var(--border); border-radius: 12px 12px 0 0; overflow: hidden; }
+.tour-bar i { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+.tour-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 16px 0; color: var(--text-muted);
+             font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.tour-card h2 { margin: 4px 16px 6px; font-size: 16px; }
+.tour-text { padding: 0 16px; color: var(--text-secondary); }
+.tour-text p, .tour-text ul, .tour-text ol { margin: 0 0 8px; }
+.tour-text ul { padding-left: 18px; }
+.tour-text li { margin-bottom: 4px; }
+.tour-text b { color: var(--text-primary); }
+.tour-task { margin: 4px 16px 0; padding: 8px 10px; background: rgba(57, 135, 229, 0.14); border: 1px solid var(--accent-strong);
+             border-radius: var(--radius); color: var(--text-primary); }
+.tour-task.done { background: var(--up-bg); border-color: var(--up); }
+.tour-foot { display: flex; justify-content: space-between; gap: 8px; padding: 12px 16px 14px; }
 
 @media (max-width: 1280px) {
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
