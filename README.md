@@ -90,11 +90,7 @@ the web app resumes your last unfinished game when you restart it (`--seed` star
 | [`docs/01-requirements.md`](docs/01-requirements.md) | What must be built and why |
 | [`docs/02-architecture.md`](docs/02-architecture.md) | Stack, structure, classes, data flow |
 | [`docs/03-finance-model.md`](docs/03-finance-model.md) | Formulas, the trends model, the ML maths |
-| [`docs/04-features-and-cli.md`](docs/04-features-and-cli.md) | Commands, screens, web pages, edge cases |
 | [`docs/05-testing.md`](docs/05-testing.md) | Test plan |
-| [`docs/06-roadmap-and-demo.md`](docs/06-roadmap-and-demo.md) | Phases, demo script, scoring checklist |
-| [`docs/07-decisions-log.md`](docs/07-decisions-log.md) | Decisions and open questions |
-| [`docs/debug-log.md`](docs/debug-log.md) | 21 real bugs: symptom → cause → fix → test |
 
 ## Status
 

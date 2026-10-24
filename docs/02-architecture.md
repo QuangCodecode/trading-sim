@@ -36,7 +36,7 @@ trading-sim/
 ├── tools/
 │   ├── train_robo.py            # trains both Robo-analyst models, saves data/robo_model.json
 │   └── verify.py                # D-28: start the web app on a throwaway database for checks
-├── docs/ (01–07, debug-log, screenshots/)
+├── docs/ (01–03, 05, screenshots/)
 ├── tradesim/
 │   ├── config.py                # ALL tunable constants
 │   ├── database.py              # SQLite: schemas, read-only reference DB, player DB, rows → old-JSON-shaped dicts

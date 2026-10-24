@@ -137,8 +137,4 @@ README.md and the docs/ folder go into more detail:
     docs/01-requirements.md     what must be built and why
     docs/02-architecture.md     stack, structure, classes, data flow
     docs/03-finance-model.md    every formula with worked examples
-    docs/04-features-and-cli.md commands, screens, edge cases
     docs/05-testing.md          test plan
-    docs/06-roadmap-and-demo.md phases and demo script
-    docs/07-decisions-log.md    decisions made
-    docs/debug-log.md           real bugs: symptom, cause, fix, test
